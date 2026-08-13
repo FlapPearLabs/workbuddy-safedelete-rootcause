@@ -22,8 +22,12 @@ observed in a Windows dev environment running WorkBuddy (Tencent) 5.3.11:
 ## Quick repro (30 seconds for Issue A)
 
 ```powershell
-git clone https://github.com/FlapPearLabs/workbuddy-safedelete-rootcause
-cd workbuddy-safedelete-rootcause
+# IMPORTANT: clone to a non-temp path. The shim deliberately skips
+# operations on os.tmpdir() paths (see genie-safe-delete.cjs
+# shouldUseNativeDelete), so cloning to %TEMP% will not reproduce
+# the shim's behavior.
+git clone https://github.com/FlapPearLabs/workbuddy-safedelete-rootcause D:\workbuddy-safedelete-rootcause
+cd D:\workbuddy-safedelete-rootcause
 powershell -ExecutionPolicy Bypass -File .\bin\repro-all.ps1
 ```
 
