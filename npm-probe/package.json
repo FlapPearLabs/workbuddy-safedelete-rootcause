@@ -1,0 +1,9 @@
+﻿{
+  "name": "npm-probe",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "parse5": "8.0.1",
+    "entities": "8.0.0"
+  }
+}

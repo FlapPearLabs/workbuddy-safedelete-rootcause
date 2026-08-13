@@ -1,0 +1,7 @@
+# Disposable lab probe fixtures and reports from this investigation.
+# node_modules are reproducible from npm-probe/package.json + package-lock.json.
+npm-probe/node_modules/
+npm-probe/_node_modules.sha256
+
+# Per-run random state dir
+workbuddy-rootcause-control/

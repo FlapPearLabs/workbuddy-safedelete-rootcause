@@ -1,0 +1,27 @@
+﻿=== MODE=normal ===
+TIMESTAMP=2026-08-13T22:34:37.0941133+08:00
+--- Step 1: shim presence probe ---
+FS_WRAPPED={"unlinkSync":false,"rmdirSync":false,"rmSync":false}
+SESSION_ID=
+NODE_OPTIONS=
+SHIM_INJECTION_CONFIRMED=NO
+--- Step 2: Node fs.rm (5 files < threshold 20) ---
+MODE=normal
+WHICH=small
+TARGET=D:\Dev\workbuddy-rootcause-lab\node-delete-probe\small
+FILE_COUNT_BEFORE=5
+SHIM_SESSION_ID=
+STILL_EXISTS_AFTER=false
+EXIT_CODE=0
+--- Step 3: Node fs.rm (40 files > threshold 20) ---
+MODE=normal
+WHICH=large
+TARGET=D:\Dev\workbuddy-rootcause-lab\node-delete-probe\large
+FILE_COUNT_BEFORE=40
+SHIM_SESSION_ID=
+STILL_EXISTS_AFTER=false
+EXIT_CODE=0
+--- Step 4: Git worktree cycles ---
+(see results-*.txt's git section; check-worktree.ps1 output)
+--- Step 4: Git worktree cycles (NORMAL mode, 5 cycles + ff merge) ---
+=== START cycles=5 repo=D:\Dev\workbuddy-rootcause-lab\git-probe-normal STEP 0: on master HEAD=3cea42f STEP 1a: switched to feature HEAD=3cea42f STEP 1b: switched back to master HEAD=3cea42f STEP 2a: switched to feature HEAD=3cea42f STEP 2b: switched back to master HEAD=3cea42f STEP 3a: switched to feature HEAD=3cea42f STEP 3b: switched back to master HEAD=3cea42f STEP 4a: switched to feature HEAD=3cea42f STEP 4b: switched back to master HEAD=3cea42f STEP 5a: switched to feature HEAD=3cea42f STEP 5b: switched back to master HEAD=3cea42f MERGE: ff-only master<-feature before=3cea42f MERGE: exit=0 after=3cea42f MERGE_OUTPUT_HEAD: Already up to date. FINAL CHECK

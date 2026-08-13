@@ -1,0 +1,54 @@
+================================================================================
+ENVIRONMENT SUMMARY (sanitized, no PII)
+================================================================================
+
+Captured: 2026-08-13
+
+HOST
+  OS             : Windows 11 Home China (10.0.26200, 64-bit)
+  Architecture   : x64
+  Memory         : 16 GB
+  Filesystem D:  : NTFS (Healthy)
+  Disk           : NVMe Micron_2450 (Healthy, Online)
+
+TOOLCHAIN
+  Git            : 2.49.0.windows.1
+  Node           : 22.15.0
+  npm            : 10.9.2
+
+WORKBUDDY (Tencent) — see <WORKBUDDY_INSTALL>
+  Version        : 5.3.11
+  Build          : <sha-redacted>
+  Runtime        : Electron 37.10.3 / Node 22.21.1 / Chrome 138
+  Install root   : <WORKBUDDY_INSTALL>
+  User data root : <USER_DATA>/.workbuddy/
+  Sandbox root   : <WORKBUDDY_INSTALL>/resources/app.asar.unpacked/cli/vendor/sandbox/5.3.3
+
+WORKBUDDY SHIM ARTIFACTS (sha256)
+  genie-safe-delete.cjs          : A9F9800C1244ADA606A73C96699DA3EBB3E056CE2115BF50912CD9EFC302D1C7
+  safe-delete-bulk-guard.cjs     : EA40BA9DFD90D6555AC516AE3CA9C1BE7332D826781FBB07AC071903D88CA822
+  tsbx.dll                       : (kernel file system minifilter, 614,448 bytes)
+  genie-trash/win32-x64.exe      : (Rust crate trash-5.2.6, 2,670,352 bytes, signed by Tencent Technology (Shenzhen))
+  tsbx_rules.json                : 30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A
+
+WORKBUDDY tsbx RULES (tsbx_rules.json)
+  version          : 1
+  default_action   : deny_write
+  recyclebin_backup: true
+  auto_grant       : true
+  file_rules_user  : ["D:\\openclaw\\proxy-agent\\**" -> inherit_user]
+  -- D:\Dev\** IS NOT in any allow-list --
+
+WORKBUDDY RUNTIME PROCESSES (observed during investigation)
+  WorkBuddy.exe             (multiple, electron main + renderer + sidecar)
+  sandbox-cli.exe           (PID 4924)   — loads tsbx.dll as kernel filter host
+  sandbox-cli-gc.exe        (PID 23076)  — garbage-collects sandbox state
+  codebuddy.exe             (CLI server, --serve)
+  daemon-app-server-entry.js
+  editor_sdk.exe            (Tencent docs engine)
+
+LAB ENVIRONMENT
+  Lab root       : D:\Dev\workbuddy-rootcause-lab
+  Control root   : <TEMP>/workbuddy-rootcause-control
+
+================================================================================

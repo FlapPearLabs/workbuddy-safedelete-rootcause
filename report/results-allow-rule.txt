@@ -1,0 +1,37 @@
+# Allow-rule experiment: NOT EXECUTED in this round
+#
+# Reason: applying the proposed narrow rule to the live tsbx_rules.json
+# would require either a WorkBuddy restart (unsafe while the user is in
+# an active WorkBuddy session) or a hot-reload mechanism that we could
+# not confirm from outside.
+#
+# What was prepared (see ../bin/ for the scripts):
+# 1. Original tsbx_rules.json backed up at:
+#      ../report/tsbx_rules.original.json
+#    sha256: 30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A
+# 2. The proposed rule is:
+#      { "path": "D:\\Dev\\workbuddy-rootcause-lab\\**", "type": "inherit_user" }
+#    This is added to the "file_rules_user" array (the schema-documented
+#    user-customizable section).
+# 3. The pre-built probe repo at ../git-probe-allow-rule/ is ready to use.
+#
+# What the engineer should do (after getting user approval for a
+# controlled WorkBuddy restart):
+# 1. Apply the rule to tsbx_rules.json -> file_rules_user.
+# 2. Restart WorkBuddy (or trigger a re-read, if hot-reload is supported).
+# 3. From within an active WorkBuddy tool-call, run:
+#      cd D:\Dev\workbuddy-rootcause-lab\git-probe-allow-rule
+#      & ..\bin\run-git-cycles.ps1 . 5
+#      & ..\bin\check-worktree.ps1 .
+# 4. Expected observation: TRACKED=52, PHYSICAL=52, MISSING=0, FSCK_HEALTHY=YES,
+#    WORKTREE_ONLY_LOSS=False.
+# 5. Compare with the same probe run from a normal (non-WorkBuddy) shell:
+#    same expected observation.
+# 6. Restore tsbx_rules.json from the backup (sha256 should match).
+#
+# If the rule eliminates the worktree anomaly: TSBX_RULE_CAUSAL_EVIDENCE = STRONG
+# (the kernel filter's deny-by-default on D:\Dev\** is confirmed as the cause).
+#
+# If the rule does not eliminate the anomaly: the cause is elsewhere
+# (e.g., a WorkBuddy feature specific to developer tools, or a separate
+# rules engine not visible in tsbx_rules.json).
