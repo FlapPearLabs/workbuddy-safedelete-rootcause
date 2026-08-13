@@ -1,47 +1,116 @@
 # check-worktree.ps1
-# Verifies that every tracked file in HEAD is present in the working tree.
-# Outputs TRACKED_COUNT, PHYSICAL_COUNT, MISSING_TRACKED_FILES.
+# Comprehensive Git worktree integrity check. Emits a structured, machine-readable
+# record of:
+#   HEAD / INDEX / PHYSICAL state for every tracked file
+#   Classifies each missing file as WORKTREE_ONLY_LOSS / INDEX_LOSS / HEAD_LOSS
+#   git status (porcelain v1)
+#   git fsck (no-reflogs)
+#   git ls-files --error-unmatch for each missing path
+#
+# Usage:
+#   .\check-worktree.ps1 -Repo <path> [-Label "step description"]
+#
+# Output: lines beginning with WORKTREE_CHECK_... for the orchestrator to parse.
+
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)][string]$Repo
+    [Parameter(Mandatory=$true)][string]$Repo,
+    [string]$Label = ''
 )
 $ErrorActionPreference = 'Stop'
 Push-Location $Repo
 try {
     $tracked = @(git ls-files)
-    $physical = 0
-    $missing = New-Object System.Collections.Generic.List[string]
-    foreach ($f in $tracked) {
-        if (Test-Path -LiteralPath $f) {
-            $physical++
-        } else {
-            $missing.Add($f) | Out-Null
+    Write-Output ("WORKTREE_CHECK_LABEL=" + $Label)
+    Write-Output ("WORKTREE_CHECK_REPO=" + $Repo)
+    Write-Output ("WORKTREE_CHECK_HEAD=" + (git rev-parse HEAD))
+    Write-Output ("WORKTREE_CHECK_BRANCH=" + (git rev-parse --abbrev-ref HEAD))
+    # HEAD tree: parse `git ls-tree HEAD` to get the root tree's SHA
+    # `git ls-tree HEAD` outputs lines like: "040000 tree <sha>\t<name>"
+    $lsTreeOut = git ls-tree HEAD
+    $headTreeSha = ''
+    foreach ($line in $lsTreeOut) {
+        if ($line -match '^[0-7]{6}\s+tree\s+([0-9a-f]{40})\s') {
+            $headTreeSha = $matches[1]
+            break
         }
     }
-    Write-Output ("REPO=" + $Repo)
-    Write-Output ("TRACKED_COUNT=" + $tracked.Count)
-    Write-Output ("PHYSICAL_COUNT=" + $physical)
-    Write-Output ("MISSING_COUNT=" + $missing.Count)
-    if ($missing.Count -gt 0) {
-        $missing | ForEach-Object { Write-Output ("MISSING_FILE: " + $_) }
+    Write-Output ("WORKTREE_CHECK_HEAD_TREE=" + $headTreeSha)
+    Write-Output ("WORKTREE_CHECK_INDEX_TREE=" + (git write-tree))
+    Write-Output ("WORKTREE_CHECK_TRACKED_COUNT=" + $tracked.Count)
+
+    $physical = 0
+    $worktreeOnlyLoss = New-Object System.Collections.Generic.List[object]
+    $indexOnlyLoss = New-Object System.Collections.Generic.List[object]
+    $headOnlyLoss = New-Object System.Collections.Generic.List[object]
+    $totalMissing = New-Object System.Collections.Generic.List[object]
+
+    foreach ($f in $tracked) {
+        $exists = Test-Path -LiteralPath $f
+        if ($exists) { $physical++; continue }
+
+        $totalMissing.Add($f) | Out-Null
+        # Classify
+        $headHas = $false
+        $indexHas = $false
+        try { $headHas = [bool](git ls-files --error-unmatch -- "$f" 2>$null) } catch {}
+        try {
+            $null = git show "HEAD:$f" 2>$null
+            if ($LASTEXITCODE -eq 0) { $headHas = $true }
+        } catch { $headHas = $false }
+        try {
+            $null = git show ":$f" 2>$null
+            if ($LASTEXITCODE -eq 0) { $indexHas = $true }
+        } catch { $indexHas = $false }
+        if ($headHas -and $indexHas) {
+            $worktreeOnlyLoss.Add([PSCustomObject]@{ Path = $f; Classification = 'WORKTREE_ONLY_LOSS' }) | Out-Null
+        } elseif ($indexHas -and -not $headHas) {
+            $indexOnlyLoss.Add([PSCustomObject]@{ Path = $f; Classification = 'INDEX_ONLY_LOSS' }) | Out-Null
+        } elseif ($headHas -and -not $indexHas) {
+            $headOnlyLoss.Add([PSCustomObject]@{ Path = $f; Classification = 'HEAD_ONLY_LOSS' }) | Out-Null
+        } else {
+            # Both missing: tracked file with no blob
+            $worktreeOnlyLoss.Add([PSCustomObject]@{ Path = $f; Classification = 'TRACKED_BUT_BOTH_MISSING' }) | Out-Null
+        }
     }
+    Write-Output ("WORKTREE_CHECK_PHYSICAL_COUNT=" + $physical)
+    Write-Output ("WORKTREE_CHECK_MISSING_COUNT=" + $totalMissing.Count)
+    Write-Output ("WORKTREE_CHECK_WORKTREE_ONLY_LOSS_COUNT=" + $worktreeOnlyLoss.Count)
+    Write-Output ("WORKTREE_CHECK_INDEX_ONLY_LOSS_COUNT=" + $indexOnlyLoss.Count)
+    Write-Output ("WORKTREE_CHECK_HEAD_ONLY_LOSS_COUNT=" + $headOnlyLoss.Count)
+    foreach ($m in $worktreeOnlyLoss) { Write-Output ("WORKTREE_CHECK_MISSING_WORKTREE_ONLY " + $m.Path) }
+    foreach ($m in $indexOnlyLoss)   { Write-Output ("WORKTREE_CHECK_MISSING_INDEX_ONLY " + $m.Path) }
+    foreach ($m in $headOnlyLoss)    { Write-Output ("WORKTREE_CHECK_MISSING_HEAD_ONLY " + $m.Path) }
+
+    # git status (porcelain v1)
+    $statusLines = git status --porcelain=v1 2>$null
+    $dCount = 0; $mCount = 0; $uuCount = 0; $aCount = 0
+    foreach ($line in $statusLines) {
+        if ($line -match '^.D') { $dCount++ }
+        elseif ($line -match '^D.') { $dCount++ }
+        elseif ($line -match '^.M' -or $line -match '^M.') { $mCount++ }
+        elseif ($line -match '^UU|^AA|^DD|^AU|^UA|^UD|^DU') { $uuCount++ }
+        elseif ($line -match '^\?\?') { $aCount++ }
+    }
+    Write-Output ("WORKTREE_CHECK_STATUS_D=" + $dCount)
+    Write-Output ("WORKTREE_CHECK_STATUS_M=" + $mCount)
+    Write-Output ("WORKTREE_CHECK_STATUS_UU=" + $uuCount)
+    Write-Output ("WORKTREE_CHECK_STATUS_UNTRACKED=" + $aCount)
+    foreach ($line in $statusLines) { Write-Output ("WORKTREE_CHECK_STATUS_LINE " + $line) }
+
+    # git fsck
     $fsck = git fsck --no-reflogs 2>&1 | Out-String
     $fsckHealthy = 'YES'
-    if ($fsck -match 'error|missing|broken') { $fsckHealthy = 'NO' }
-    Write-Output ("FSCK_HEALTHY=" + $fsckHealthy)
-    Write-Output ("FSCK_OUTPUT=" + $fsck.Trim())
-    $status = git status --short 2>&1 | Out-String
-    $dCount = 0; $mCount = 0; $uuCount = 0
-    foreach ($line in ($status -split "`n")) {
-        if ($line -match '^\s*D\s+') { $dCount++ }
-        elseif ($line -match '^\s*M\s+') { $mCount++ }
-        elseif ($line -match '^UU|^AA|^DD|^AU|^UA|^UD|^DU') { $uuCount++ }
-    }
-    Write-Output ("GIT_STATUS_D_LINES=" + $dCount)
-    Write-Output ("GIT_STATUS_M_LINES=" + $mCount)
-    Write-Output ("GIT_STATUS_UU_LINES=" + $uuCount)
-    $worktreeLoss = ($missing.Count -gt 0)
-    Write-Output ("WORKTREE_ONLY_LOSS=" + $worktreeLoss)
+    if ($fsck -match 'error|missing object|broken') { $fsckHealthy = 'NO' }
+    Write-Output ("WORKTREE_CHECK_FSCK_HEALTHY=" + $fsckHealthy)
+    Write-Output ("WORKTREE_CHECK_FSCK_OUTPUT=" + ($fsck.Trim() -replace '\s+', ' '))
+
+    # Final classification
+    $verdict = 'CLEAN'
+    if ($worktreeOnlyLoss.Count -gt 0) { $verdict = 'WORKTREE_ONLY_LOSS' }
+    elseif ($indexOnlyLoss.Count -gt 0) { $verdict = 'INDEX_ONLY_LOSS' }
+    elseif ($headOnlyLoss.Count -gt 0) { $verdict = 'HEAD_ONLY_LOSS' }
+    Write-Output ("WORKTREE_CHECK_VERDICT=" + $verdict)
 } finally {
     Pop-Location
 }

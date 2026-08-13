@@ -13,8 +13,8 @@ param(
 $ErrorActionPreference = 'Continue'
 
 # Sanity check: this wrapper does NOT talk to the real project. It is only
-# used to run disposable probe commands under D:\Dev\workbuddy-rootcause-lab
-# or %TEMP%\workbuddy-rootcause-control.
+# used to run disposable probe commands under the cloned repo root
+# (auto-resolved) or %TEMP%\workbuddy-rootcause-control.
 $here = (Resolve-Path $PSScriptRoot).Path
 $repoRoot = (Resolve-Path "$here\..").Path
 $projectBlacklist = 'D:\Dev\zhihu-grabber-toolkit'
