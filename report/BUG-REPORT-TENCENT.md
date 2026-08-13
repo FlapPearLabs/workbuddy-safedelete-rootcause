@@ -3,7 +3,8 @@
 **Product:** WorkBuddy (Tencent)
 **Component:** `genie-safe-delete.cjs` Node shim + `safe-delete-bulk-guard.cjs` + `tsbx` kernel sandbox
 **Severity:** MEDIUM (Issue A) / MEDIUM with HIGH-confidence unconfirmed (Issue B)
-**Reproduction environment:** Windows 11 (any), Git 2.49, Node 22, npm 10, WorkBuddy 5.3.11
+**Reproduction environment:** Windows 11 10.0.26200, Git 2.49, Node 22, npm 10, WorkBuddy 5.3.11
+(observed on a single installation; not claimed for all Windows 11 versions)
 **Date filed:** 2026-08-13
 **Repro repository:** https://github.com/FlapPearLabs/workbuddy-safedelete-rootcause
 
@@ -66,8 +67,13 @@ The failure is **not silent**: the bulk-guard emits a single line of stderr iden
 ## 30-second repro (one click)
 
 ```powershell
-git clone https://github.com/FlapPearLabs/workbuddy-safedelete-rootcause
-cd workbuddy-safedelete-rootcause
+# IMPORTANT: clone to a NON-TEMP path. The shim
+# (genie-safe-delete.cjs:shouldUseNativeDelete) deliberately skips
+# operations on os.tmpdir() paths, so cloning to %TEMP% will not
+# reproduce the shim's behavior. A neutral, non-D: example path is used
+# below; substitute the path that matches your environment.
+git clone https://github.com/FlapPearLabs/workbuddy-safedelete-rootcause C:\workbuddy-safedelete-rootcause
+cd C:\workbuddy-safedelete-rootcause
 powershell -ExecutionPolicy Bypass -File .\bin\repro-all.ps1
 ```
 
@@ -122,12 +128,12 @@ This has been observed repeatedly in the user's native WorkBuddy session (5+ eve
 
 ## Native WorkBuddy reproduction (Phase 1 of the verification procedure)
 
-The lab probe (`bin/repro-all.ps1`) is **not** able to reproduce Issue B from a non-WorkBuddy shell, because the kernel filter (`tsbx.dll`) is only loaded into processes spawned by `sandbox-cli.exe` inside a real WorkBuddy session. The Node shim is conclusively ruled out by the lab probe's Phase 3 (Git A/B): 11 per-step `WORKTREE_CHECK_VERDICT=CLEAN` results in both NORMAL and SHIM-ONLY modes, with a real branch delta (60 tracked files on master, feature branch with 48 modified / 5 deleted / 16 added / 4 renamed).
+The lab probe (`bin/repro-all.ps1`) is **not** able to reproduce Issue B from a non-WorkBuddy shell, because the kernel filter (`tsbx.dll`) is only loaded into processes spawned by `sandbox-cli.exe` inside a real WorkBuddy session. The Node shim is conclusively ruled out by the lab probe's Phase 3 (Git A/B): 11 per-step `WORKTREE_CHECK_VERDICT=CLEAN` results in both NORMAL and SHIM-ONLY modes, with a real branch delta (60 tracked files on master, feature branch with 46 modified / 5 deleted / 16 added / 4 renamed).
 
 The complete, copy-pasteable procedure for running the Git probe from inside a real WorkBuddy tool-call is in `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`. It has 3 phases:
 
-1. **Phase 1 — REAL WORKBUDDY BASELINE.** Run the Git probe (5 cycles + 1 merge) from a WorkBuddy tool-call with `tsbx_rules.json` unchanged. Record the outcome. If `WORKTREE_LOSS_REPRODUCED: YES`, save the post-loss snapshot. If `NO_IN_10_CYCLES`, stop and report.
-2. **Phase 2 — WorkBuddy-native rule A/B.** Add a narrow `inherit_user` rule covering only the lab root to `tsbx_rules.json -> file_rules_user`. After a WorkBuddy restart, re-run the same Git probe. Compare outcomes.
+1. **Phase 1 — REAL WORKBUDDY BASELINE.** Run the Git probe (5 cycles + 1 merge = 11 per-step checks) from a WorkBuddy tool-call with `tsbx_rules.json` unchanged. Record the outcome. If `WORKTREE_LOSS_REPRODUCED: YES`, save the post-loss snapshot. If `NO_IN_11_STEPS`, stop and report.
+2. **Phase 2A/2B/2C — WorkBuddy-native rule A/B.** Phase 2A prepares a narrow `inherit_user` rule covering only the lab root in `tsbx_rules.json -> file_rules_user` (atomic edit with byte-exact backup, via `bin/prepare-tsbx-lab-rule.ps1`). After a user-controlled WorkBuddy restart, Phase 2B re-runs the same Git probe. Phase 2C always restores the original bytes via `bin/restore-tsbx-lab-rule.ps1` and a second user-controlled restart. Compare outcomes.
 3. **Phase 3 — Optional ETW / ProcMon capture.** If `procmon.exe` or `xperf` is available, capture a trace of the Git probe to directly observe the kernel-filter denials.
 
 ## A/B result (so far)
@@ -137,7 +143,7 @@ The complete, copy-pasteable procedure for running the Git probe from inside a r
 | NORMAL (env cleared) | 11/11 steps `WORKTREE_CHECK_VERDICT=CLEAN` |
 | SHIM-ONLY (env + `NODE_OPTIONS=--require=genie-safe-delete.cjs`) | 11/11 steps `WORKTREE_CHECK_VERDICT=CLEAN` |
 | WORKBUDDY FULL (kernel filter active) | **PENDING_NATIVE_WORKBUDDY_EXECUTION** (Phase 1 in `NEXT-WORKBUDDY-GIT-EXPERIMENT.md`) |
-| WORKBUDDY FULL + `inherit_user` allow-rule | **PENDING_NATIVE_WORKBUDDY_EXECUTION** (Phase 2) |
+| WORKBUDDY FULL + `inherit_user` allow-rule | **PENDING_NATIVE_WORKBUDDY_EXECUTION** (Phase 2A/2B in `NEXT-WORKBUDDY-GIT-EXPERIMENT.md`) |
 
 The lab probe rules out the Node shim as the cause. The remaining candidate is the kernel filter. The kernel filter is the only mechanism consistent with all observed facts:
 
@@ -171,17 +177,18 @@ in time to recover from the OS recycle bin (per `recyclebin_backup: true`).
 |---|---|---|---|
 | `COMMITTED_CONTENT` | Tracked files already in HEAD | LOW. Git object is intact; `git restore --worktree <path>` or `git checkout HEAD -- <path>` recovers it. | HEAD / index / blob verified intact in all observed user-side cases (5+ events). |
 | `STAGED_CONTENT` | Files added to index but not committed | LOW. Index entry persists. | Per `git ls-files --error-unmatch <path>` and `git show :<path>` results in the lab probe. |
-| `UNSTAGED_CONTENT` | Tracked files modified in worktree but not staged | POTENTIALLY_MEDIUM. If the worktree-only deletion happens to a file that was `M`-status, the file is lost from the worktree. The change is **not** in the index. `git restore --worktree <path>` would set the worktree file to the **index version** (i.e. wipe the unstaged change). Recovery from the worktree-only deletion alone is therefore non-trivial; the user must `git diff` first and re-apply the change after `git restore`. | Inferred from the worktree-only pattern; the lab probe does not yet exercise this exact race. The user has not reported losing unstaged changes (they tend to commit before risky operations). |
+| `UNSTAGED_CONTENT` | Tracked files modified in worktree but not staged | POTENTIALLY_MEDIUM. If the worktree-only deletion happens to a file that was `M`-status, the file is lost from the worktree. The prior unstaged bytes are **not** stored in HEAD or in the index. `git restore --worktree <path>` would set the worktree file to the **index version** (i.e. wipe the unstaged change). Before running `git restore`, check possible external recovery sources: the OS recycle bin, the editor / IDE local history, autosave / backup, or any other out-of-band copy. `git diff` cannot recover the bytes either, because the file is already gone from the worktree. | Inferred from the worktree-only pattern; the lab probe does not yet exercise this exact race. The user has not reported losing unstaged changes (they tend to commit before risky operations). |
 | `UNTRACKED_CONTENT` | New files not in HEAD or index | POTENTIALLY_MEDIUM. The kernel filter may route the unlink to the OS recycle bin per `recyclebin_backup: true`, in which case recovery is possible from the recycle bin. If the recycle bin is emptied before the user notices, the file is lost. | Inferred from the rule's `recyclebin_backup: true` setting; the empirical routing has **not** been observed directly in this round. |
 
 **The risk is concentrated in `UNSTAGED_CONTENT` and `UNTRACKED_CONTENT`.** The
 lab probe and the user's audit log show `COMMITTED_CONTENT` and `STAGED_CONTENT`
 are recoverable in all observed cases. We do **not** claim that
 `git restore --worktree` recovers unstaged modifications — it does not. The
-correct recovery for an unstaged modification after a worktree-only deletion is
-to first capture the modification (e.g. `git diff > /tmp/patch.diff` would also
-fail under the bulk-guard; an out-of-band copy is required) and only then
-`git restore --worktree <path>`.
+prior unstaged bytes are not stored in HEAD or in the index; once the file is
+gone from the worktree, the only recovery paths are external (OS recycle bin,
+editor / IDE local history, autosave / backup, or any other out-of-band copy).
+`git diff` also cannot recover the bytes, because the file is already gone
+from the worktree.
 
 # Workaround (verified in lab and at user site)
 
@@ -191,7 +198,13 @@ These workarounds are independently verified by the user and by the lab probe:
 2. **Use `npm install` instead of `npm ci` inside a WorkBuddy session** if a clean install is required. `npm install` does not delete the entire `node_modules` tree in one operation, so the bulk-guard threshold is less likely to fire. This is a workaround, not a fix.
 3. **After any `git switch` or `git merge`, run `git status --short` immediately.** If any ` D` lines appear, run `git restore --worktree <path>` (one at a time, or `git restore --worktree -- .` for all). The recovery is non-destructive for committed and staged content.
 4. **Commit frequently.** Tracked worktree files that are committed are not at risk of the worktree-only deletion causing data loss. Commit-then-do-other-operations limits the window.
-5. **For unstaged modifications**, capture the diff out-of-band (e.g. `Get-Content` of the file to a temp location) before running `git restore --worktree`. The bulk-guard may also block out-of-band copy if the directory has many files; copy single files, not directories.
+5. **For unstaged modifications**, the only recovery paths are external:
+   check the OS recycle bin, the editor / IDE local history, autosave /
+   backup, or any other out-of-band copy made before the operation.
+   `git restore --worktree` will set the worktree file to the **index
+   version** (i.e. wipe the unstaged change), so do not run it before
+   external recovery is exhausted. `git diff` cannot recover the
+   bytes either, because the file is already gone from the worktree.
 
 # Suggested fixes
 
@@ -211,8 +224,9 @@ The disposable lab at this repository is a self-contained, one-click reproductio
 environment.
 
 ```powershell
-git clone https://github.com/FlapPearLabs/workbuddy-safedelete-rootcause
-cd workbuddy-safedelete-rootcause
+# IMPORTANT: clone to a NON-TEMP path; see Quick repro above.
+git clone https://github.com/FlapPearLabs/workbuddy-safedelete-rootcause C:\workbuddy-safedelete-rootcause
+cd C:\workbuddy-safedelete-rootcause
 powershell -ExecutionPolicy Bypass -File .\bin\repro-all.ps1
 ```
 

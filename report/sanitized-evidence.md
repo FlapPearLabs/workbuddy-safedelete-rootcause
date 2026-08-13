@@ -327,7 +327,7 @@ GIT_PROBE_FEATURE_FILE_COUNT=71
 BRANCH_DELTA_VALID=YES
 ```
 
-The feature branch contains: 48 modified tracked files, 5 deleted tracked files (`test/t16/spec.txt` ... `test/t20/spec.txt`), 16 newly added tracked files (`src/new01.txt` ... `test/new08.txt`), and 4 renames. This produces a non-trivial worktree mutation on every `git switch feature/probe/multi-level` and on the `git merge --ff-only`.
+The feature branch contains: 46 modified tracked files, 5 deleted tracked files (`test/t16/spec.txt` ... `test/t20/spec.txt`), 16 newly added tracked files (`src/new01.txt` ... `test/new08.txt`), and 4 renames (`docs/d09/note-renamed.txt`, `docs/d10/note-renamed.txt`, `src/a24/main-renamed.txt`, `src/a25/main-renamed.txt`). This produces a non-trivial worktree mutation on every `git switch feature/probe/multi-level` and on the `git merge --ff-only`.
 
 **Per-step integrity check (run after EVERY git operation):**
 

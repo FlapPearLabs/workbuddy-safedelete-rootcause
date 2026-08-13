@@ -6,7 +6,10 @@
 #
 # This file remains as a high-level reference. The full procedure handles:
 #   - Phase 1: REAL WORKBUDDY BASELINE (no rule changes, kernel filter active)
-#   - Phase 2: WorkBuddy-native rule A/B (add narrow inherit_user rule, restart, re-run)
+#   - Phase 2A/2B/2C: WorkBuddy-native rule A/B
+#       Phase 2A = prepare (atomic edit + byte-exact backup of tsbx_rules.json)
+#       Phase 2B = after user-controlled WorkBuddy restart, run the same Git probe
+#       Phase 2C = always restore the original bytes + second user-controlled restart
 #   - Phase 3: Optional ETW / ProcMon capture of the kernel-filter denials
 #
 # The full procedure includes:
@@ -23,27 +26,29 @@
 # 2. The proposed rule (added to file_rules_user):
 #      { "path": "<WORKSPACE>\\**", "type": "inherit_user" }
 # 3. The Git probe is generated at runtime by bin/build-git-probe.ps1
-#    (60 tracked files on master, 48 modified / 5 deleted / 16 added / 4 renamed on feature).
+#    (60 tracked files on master, 46 modified / 5 deleted / 16 added / 4 renamed on feature).
 #
 # Why not auto-executed:
 #   Applying the proposed narrow rule to the live tsbx_rules.json would require
 #   either a WorkBuddy restart (unsafe while the user is in an active WorkBuddy
 #   session) or a hot-reload mechanism that we could not confirm from outside.
 #   The procedure in NEXT-WORKBUDDY-GIT-EXPERIMENT.md pauses for explicit user
-#   consent before modifying the live tsbx_rules.json.
+#   consent before modifying the live tsbx_rules.json, and uses
+#   bin/prepare-tsbx-lab-rule.ps1 / bin/restore-tsbx-lab-rule.ps1 for safe
+#   byte-exact backup / restore. The procedure does NOT claim hot reload.
 #
 # Expected outcomes:
-#   Phase 1 (no rule change):
-#     WORKTREE_LOSS_REPRODUCED: <YES | NO_IN_10_CYCLES>
-#   Phase 2 (with inherit_user rule covering only the lab root):
-#     WORKTREE_LOSS_REPRODUCED: <YES | NO_IN_10_CYCLES>
+#   Phase 1 (no rule change, 11 per-step checks: 5+1+5):
+#     WORKTREE_LOSS_REPRODUCED: <YES | NO_IN_11_STEPS>
+#   Phase 2B (with inherit_user rule covering only the lab root, 11 per-step checks):
+#     WORKTREE_LOSS_REPRODUCED: <YES | NO_IN_11_STEPS>
 #
-#   If Phase 1 = YES and Phase 2 = NO:
+#   If Phase 1 = YES and Phase 2B = NO:
 #     SANDBOX_POLICY_CAUSE_CONFIRMED
 #   If Phase 3 (ETW/ProcMon) also captures the kernel-filter denials:
 #     COMPONENT_LEVEL_CAUSE_CONFIRMED
 #
-#   If Phase 1 = NO_IN_10_CYCLES:
+#   If Phase 1 = NO_IN_11_STEPS:
 #     The investigation stays at HIGH_CONFIDENCE_INFERENCE for Issue B's
 #     component-level cause, and the bug report's "Severity" and "Issue B"
 #     sections should be downgraded accordingly.

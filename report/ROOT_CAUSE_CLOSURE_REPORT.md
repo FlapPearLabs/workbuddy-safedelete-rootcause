@@ -174,12 +174,17 @@ user notices in time to recover from the OS recycle bin (per
 |---|---|---|
 | `COMMITTED_CONTENT_RISK` | LOW | Git object is intact; `git restore --worktree <path>` or `git checkout HEAD -- <path>` recovers it. HEAD / index / blob verified intact in all observed user-side cases. |
 | `STAGED_CONTENT_RISK` | LOW | Index entry persists. |
-| `UNSTAGED_CONTENT_RISK` | POTENTIALLY_MEDIUM | If the worktree-only deletion happens to a file that was `M`-status, the file is lost from the worktree. The change is **not** in the index. `git restore --worktree <path>` would set the worktree file to the **index version** (i.e. wipe the unstaged change). Recovery is non-trivial: capture the diff out-of-band before `git restore --worktree`. |
+| `UNSTAGED_CONTENT_RISK` | POTENTIALLY_MEDIUM | If the worktree-only deletion happens to a file that was `M`-status, the file is lost from the worktree. The prior unstaged bytes are **not** in HEAD or in the index. `git restore --worktree <path>` would set the worktree file to the **index version** (i.e. wipe the unstaged change). The only recovery paths are external (OS recycle bin, editor / IDE local history, autosave / backup, out-of-band copy). `git diff` cannot recover the bytes either, because the file is already gone from the worktree. |
 | `UNTRACKED_CONTENT_RISK` | POTENTIALLY_MEDIUM | The kernel filter may route the unlink to the OS recycle bin per `recyclebin_backup: true`. If the recycle bin is emptied before the user notices, the file is lost. |
 
 **Permanent data loss has not been observed in this round.** The risk is
 concentrated in `UNSTAGED_CONTENT` and `UNTRACKED_CONTENT`. We do **not**
 claim that `git restore --worktree` recovers unstaged modifications — it
+does not. The prior unstaged bytes are not stored in HEAD or in the
+index. Before running `git restore --worktree`, check the OS recycle
+bin, the editor / IDE local history, autosave / backup, or any other
+out-of-band copy. `git diff` cannot recover the bytes either, because
+the file is already gone from the worktree.
 does not.
 
 ---
@@ -189,7 +194,7 @@ does not.
 - ✅ Test scratch space: use `os.tmpdir()` instead of `process.cwd()` (user has adopted this)
 - ✅ `npm ci`: run from a non-WorkBuddy shell
 - ✅ `git restore --worktree <path>` after any suspicious `git status` output (committed / staged content only)
-- ✅ Capture unstaged changes out-of-band before `git restore --worktree`
+- ✅ Capture unstaged changes via external means (recycle bin / editor local history / autosave) before `git restore --worktree`
 - ✅ Commit frequently to limit the worktree-only window
 - ⏳ Proposed narrow `tsbx_rules.json` rule (proposed, native verification pending — see `NEXT-WORKBUDDY-GIT-EXPERIMENT.md`)
 

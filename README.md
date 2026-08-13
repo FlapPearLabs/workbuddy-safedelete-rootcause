@@ -107,7 +107,7 @@ In `bin/`:
   40 files).
 - `build-git-probe.ps1` / `check-worktree.ps1` / `run-git-cycles.ps1` —
   disposable git repo with 60 tracked files on master, feature branch
-  with 48 modified / 5 deleted / 16 added / 4 renamed; verifies
+  with 46 modified / 5 deleted / 16 added / 4 renamed; verifies
   worktree integrity after every step.
 - `build-fixture.ps1` — creates the small/large Node delete fixtures.
 - `run-as-workbuddy.ps1` — sets the WorkBuddy env vars and invokes a
