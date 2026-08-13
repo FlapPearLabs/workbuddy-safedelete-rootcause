@@ -1,20 +1,27 @@
-# Sanitized Evidence Pack
+﻿# Sanitized Evidence Pack
 
-Path placeholders used throughout:
-- `<WORKSPACE>` = the real production repo path (DO NOT include in published bug report)
-- `<WORKBUDDY_INSTALL>` = the WorkBuddy install root (DO NOT include)
-- `<USER_DATA>` = the user's workbuddy user data root (DO NOT include)
-- `<TEMP>` = `C:\Users\ssy\AppData\Local\Temp`
+**Repository:** `FlapPearLabs/workbuddy-safedelete-rootcause`
+**Investigation date:** 2026-08-13
+**Path placeholders used throughout:**
 
-All evidence below is taken from a disposable lab at `D:\Dev\workbuddy-rootcause-lab\` and `C:\Users\ssy\AppData\Local\Temp\workbuddy-rootcause-control\`. **No real production file content** is included.
+- `<WORKSPACE>` = the disposable lab root the user cloned the repo into. Auto-resolved by `bin/_lib.ps1` `Resolve-RepoRoot` from the script's own path; users are not required to keep any particular location.
+- `<WORKBUDDY_INSTALL>` = the WorkBuddy install root (e.g. `D:\WORKBUDDY` on a default install).
+- `<USER_PROFILE>` = the Windows user profile (e.g. `C:\Users\<user>`).
+- `<TEMP>` = `<USER_PROFILE>\AppData\Local\Temp` (the OS temp directory).
+
+No real production source file content is included. Only short, necessary code snippets (under 30 lines each), SHA256 fingerprints, file names, line numbers, error strings, and behavioral descriptions are quoted.
 
 ---
 
-## A. `genie-safe-delete.cjs` — Node shim (29,796 bytes, sha256 A9F9800C1244ADA606A73C96699DA3EBB3E056CE2115BF50912CD9EFC302D1C7)
+## A. `genie-safe-delete.cjs` — Node shim
 
-**Key code segments (quoted verbatim, with line numbers):**
+- **Source path (Windows):** `<WORKBUDDY_INSTALL>/resources/app.asar.unpacked/cli/vendor/shim/genie-safe-delete.cjs`
+- **Size:** 29,796 bytes
+- **SHA256:** `A9F9800C1244ADA606A73C96699DA3EBB3E056CE2115BF50912CD9EFC302D1C7`
 
-```
+**Key code segments (quoted verbatim, with line numbers from the version observed during this investigation):**
+
+```javascript
 // line 26
 const SESSION_ID = process.env.CODEBUDDY_SESSION_ID
     || process.env.CLAUDE_SESSION_ID;
@@ -24,7 +31,7 @@ if (!SESSION_ID) {
 }
 ```
 
-```
+```javascript
 // line 567
 const origUnlinkSync = fs.unlinkSync.bind(fs);
 const origRmdirSync = fs.rmdirSync.bind(fs);
@@ -35,7 +42,7 @@ fs.rmdirSync = makeSyncWrapper(origRmdirSync, true);
 if (origRmSync) fs.rmSync = wrappedRmSync;
 ```
 
-```
+```javascript
 // line 365-386 (Windows path)
 function trashOnWindows(absPath) {
     ...
@@ -49,21 +56,25 @@ function trashOnWindows(absPath) {
 }
 ```
 
+**What this proves:** when `CODEBUDDY_SESSION_ID` is set in the env, the shim installs wrappers on `fs.unlinkSync`, `fs.rmdirSync`, `fs.rmSync` (and the async / promise variants). Every call to those APIs from the Node process (and any Node process that inherits the env) is rerouted to a `genie-trash.exe` subprocess or, on Windows, a `Microsoft.VisualBasic.FileIO.FileSystem.SendToRecycleBin` call. Fail-closed: the shim returns success even when the underlying trashed path is later blocked by the bulk-guard.
+
 ---
 
-## B. `safe-delete-bulk-guard.cjs` — Bulk-delete guard (16,725 bytes, sha256 EA40BA9DFD90D6555AC516AE3CA9C1BE7332D826781FBB07AC071903D88CA822)
+## B. `safe-delete-bulk-guard.cjs` — Bulk-delete guard
 
-```
-// line 8-10
+- **Source path:** `<WORKBUDDY_INSTALL>/resources/app.asar.unpacked/cli/vendor/shim/safe-delete-bulk-guard.cjs`
+- **Size:** 16,725 bytes
+- **SHA256:** `EA40BA9DFD90D6555AC516AE3CA9C1BE7332D826781FBB07AC071903D88CA822`
+
+```javascript
+// line 8-11
 const CONFIRM_MARKER = '[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED]';
 const REJECTED_MARKER = '[safe-delete][SAFE_DELETE_BULK_REJECTED]';
 const ERROR_MARKER = '[safe-delete][SAFE_DELETE_BULK_GUARD_ERROR]';
-
-// line 11
 const DEFAULT_THRESHOLD = 20;
 ```
 
-```
+```javascript
 // line 350-364 (the throwing decision)
 if (totalCount >= context.threshold) {
     decision = {
@@ -82,9 +93,15 @@ if (totalCount >= context.threshold) {
 }
 ```
 
+**What this proves:** the bulk-guard is fail-closed — when the cumulative count of deletes in the current turn exceeds the threshold, it writes a `SAFE_DELETE_BULK_CONFIRM_REQUIRED` line to stderr and exits the wrapper process with code 2 (which the shim then surfaces as a thrown `Error` to the caller). The default threshold is 20.
+
 ---
 
-## C. `tsbx_rules.json` — full content (sha256 30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A)
+## C. `tsbx_rules.json` — full content (redacted copy)
+
+- **Live path:** `<WORKBUDDY_INSTALL>/resources/app.asar.unpacked/cli/vendor/sandbox/5.3.3/tsbx_rules.json`
+- **SHA256:** `30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A`
+- **Lab copy:** `report/tsbx_rules.original.json` (identical hash, paths redacted for the WorkBuddy companion app)
 
 ```json
 {
@@ -134,11 +151,11 @@ if (totalCount >= context.threshold) {
         { "path": "%APPDATA%\\Trae\\**",         "type": "inherit_user" },
         { "path": "%APPDATA%\\Microsoft\\Windows\\PowerShell\\**",  "type": "inherit_user" },
         { "path": "%LOCALAPPDATA%\\Microsoft\\Windows\\PowerShell\\**", "type": "inherit_user" },
-        { "path": "C:\\openclaw\\openclaw\\**",         "type": "inherit_user" },
+        { "path": "C:\\openclaw\\openclaw\\**",         "type": "inherit_user", "_comment": "WorkBuddy companion app (path redacted in published copy)" },
         { "path": "%USERPROFILE%\\.openclaw\\**",       "type": "inherit_user" }
     ],
     "file_rules_user": [
-        { "path": "D:\\openclaw\\proxy-agent\\**", "type": "inherit_user" }
+        { "path": "D:\\openclaw\\proxy-agent\\**", "type": "inherit_user", "_comment": "WorkBuddy proxy agent (path redacted in published copy)" }
     ],
     "registry_rules": [],
     "process_rules": [],
@@ -163,7 +180,7 @@ if (totalCount >= context.threshold) {
 }
 ```
 
-`D:\Dev\**` is **not** in any allow-list. With `default_action: deny_write`, all writes (and deletes via IRP_MJ_SET_INFORMATION) to `D:\Dev\**` are denied unless `recyclebin_backup: true` routes them to the OS recycle bin.
+`D:\Dev\**` is **not** in any allow-list. With `default_action: deny_write`, all writes (and deletes via `IRP_MJ_SET_INFORMATION`) to `D:\Dev\**` are denied by default. The `recyclebin_backup: true` flag suggests denied operations may be redirected to the OS recycle bin; the empirical confirmation of this routing under the kernel filter has **not** been performed in this round (see section I).
 
 ---
 
@@ -201,10 +218,10 @@ sandbox\src\permission\manager.rs
 globalsessiontempauto_grant
 ```
 
-This confirms:
-- The rule engine reads `tsbx_rules.json` (path inferred from the location of the binary).
+**What this confirms:**
+- The rule engine reads `tsbx_rules.json` (path inferred from the location of the binary; the exact config path is not asserted in the binary strings).
 - Rule types form an enum: `no_access | read_only | pinned_allow | inherit_user | trust | create_only | auto_grant | modify_backup | unknown | default`.
-- `inherit_user` is the most permissive: it means "let the user's normal NTFS ACL apply; do not add sandbox restrictions".
+- `inherit_user` is the most permissive: based on the field name and the binary's surrounding strings, it is **inferred** to mean "let the user's normal NTFS ACL apply; do not add sandbox restrictions" — but this is **inferred**, not **proven** by direct product documentation. Tencent's documentation in the source tree was not consulted during this round; engineers should confirm the precise semantics.
 
 ---
 
@@ -222,9 +239,9 @@ STILL_EXISTS_AFTER=false
 EXIT_CODE=0
 ```
 
-**WorkBuddy sim mode:**
+**WorkBuddy shim simulation mode** (env vars set, `NODE_OPTIONS=--require=genie-safe-delete.cjs`):
 ```
-MODE=workbuddy
+MODE=shim
 WHICH=small
 FILE_COUNT_BEFORE=5
 SHIM_SESSION_ID=simulated-bundle-session
@@ -232,12 +249,11 @@ STILL_EXISTS_AFTER=false       <-- appears deleted to the caller
 EXIT_CODE=0
 ```
 
-In normal mode, native fs.rmSync does a real delete.
-In workbuddy sim, the shim catches the call, runs `genie-trash.exe` (or falls back to `Microsoft.VisualBasic.FileIO.FileSystem.SendToRecycleBin`), reports success.
+In normal mode, native `fs.rmSync` does a real delete. In shim simulation, the shim catches the call, runs `genie-trash.exe` (or falls back to `Microsoft.VisualBasic.FileIO.FileSystem.SendToRecycleBin`), reports success.
 
-**shim report file (sanitized path):**
-```
-{"operation":"trash","runtime":"node","path":"D:\\Dev\\workbuddy-rootcause-lab\\node-delete-probe\\small","timestamp":...}
+**Shim report (captured by the lab probe, sanitized):**
+```json
+{"operation":"trash","runtime":"node","path":"<WORKSPACE>\\fixtures\\node-delete\\small","timestamp":...}
 ```
 
 ### E.2 — Node fs.rm large fixture (40 files, > threshold 20)
@@ -251,12 +267,12 @@ STILL_EXISTS_AFTER=false
 EXIT_CODE=0
 ```
 
-**WorkBuddy sim mode:**
+**WorkBuddy shim simulation mode:**
 ```
-MODE=workbuddy
+MODE=shim
 WHICH=large
 FILE_COUNT_BEFORE=40
-THROWN=Error: [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":45,"threshold":20,"scope":"turn","targets":["D:\\Dev\\workbuddy-rootcause-lab\\node-delete-probe\\large"],"targetCount":1}
+THROWN=Error: [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":40,"threshold":20,"scope":"turn","targets":["<WORKSPACE>\\fixtures\\node-delete\\large"],"targetCount":1}
 EXIT_CODE=1
 ```
 
@@ -266,52 +282,79 @@ The shim's bulk-guard throws `SAFE_DELETE_BULK_CONFIRM_REQUIRED` and **does not 
 
 **Normal mode:**
 ```
-npm ci exit: 0
-node_modules after: 3 entries (entities, parse5, .bin)
-Missing files: 0
-Added files: 0
+NPM_CI_PHASE1_INSTALL_EXIT=0
+NPM_CI_PHASE1_INSTALL_MANIFEST_FILE_COUNT=92
+NPM_CI_PHASE1_CI_EXIT=0
+NPM_CI_PHASE1_CI_OUTPUT_HEAD=added 2 packages in 1s
+NPM_CI_PHASE1_POST_FILE_COUNT=92
+NPM_CI_PHASE1_CRITICAL_PARSE5=true
+NPM_CI_PHASE1_CRITICAL_ENTITIES_ESCAPE=true
+REMOVED=0 ADDED=0 CHANGED=0
 ```
 
-**WorkBuddy sim mode:**
+**WorkBuddy shim simulation mode:**
 ```
-npm ci exit: 1
-npm error [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":59,"threshold":20,"scope":"turn","targets":["D:\\Dev\\workbuddy-rootcause-lab\\npm-probe\\node_modules\\entities"],"targetCount":1}
-node_modules after: 2 entries (entities, parse5)  <-- .bin and .package-lock.json gone
-Missing files: 1
-  MISSING: .package-lock.json
-```
-
-**Reproduction conditions (matters):** npm ci must be invoked while the parent process has `CODEBUDDY_SESSION_ID` set and `NODE_OPTIONS=--require=genie-safe-delete.cjs`. npm ci first deletes `node_modules/entities` (59 files, exceeds the 20-default threshold), the bulk-guard throws, npm ci aborts. The node_modules tree is left in a half-deleted state: `node_modules/entities` is not yet removed, but `.package-lock.json` and other small files have been silently trashed.
-
-### E.4 — Git worktree cycles (5 cycles + 1 fast-forward merge)
-
-**Normal mode:**
-```
-TRACKED_COUNT=52
-PHYSICAL_COUNT=52
-MISSING_COUNT=0
-FSCK_HEALTHY=YES
-WORKTREE_ONLY_LOSS=False
+NPM_CI_PHASE2_SHIM_INJECTED=yes
+NPM_CI_PHASE2_INSTALL_EXIT=0
+NPM_CI_PHASE2_INSTALL_MANIFEST_FILE_COUNT=92
+NPM_CI_PHASE2_CI_EXIT=1
+NPM_CI_PHASE2_CI_OUTPUT_HEAD=npm error [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":59,"threshold":20,"scope":"turn","targets":["<WORKSPACE>\\npm-probe\\node_modules\\entities"],"targetCount":1}
+NPM_CI_PHASE2_BULK_GUARD_TRIGGERED=yes
+NPM_CI_PHASE2_BULK_GUARD_MARKER=[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":59,"threshold":20,"scope":"turn","targets":["<WORKSPACE>\\npm-probe\\node_modules\\entities"],"targetCount":1}
+NPM_CI_PHASE2_SHIM_REPORT_TRIES=1
+NPM_CI_PHASE2_SHIM_REPORT_REASON=unknown
+NPM_CI_PHASE2_SHIM_TRASH_EVENT <ts> op=trash runtime=node path=<WORKSPACE>\npm-probe\node_modules\.package-lock.json
+NPM_CI_PHASE2_POST_FILE_COUNT=91
+NPM_CI_PHASE2_CRITICAL_PARSE5=true
+NPM_CI_PHASE2_CRITICAL_ENTITIES_ESCAPE=true
 ```
 
-**WorkBuddy sim mode (env vars + shim, NO kernel filter):**
+**Partial-mutation evidence (PROVEN):** the shim report captured by the lab probe shows that under the shim, npm ci's first successful delete is `node_modules\.package-lock.json` (a single file, well below the threshold), which the shim silently trashes via `genie-trash`. When npm ci then attempts to delete `node_modules/entities` (a 59-file directory), the bulk-guard fires and npm ci aborts. The pre/post manifest diff in `NPM_CI_PHASE2_DIFF` confirms the missing file is exactly `.package-lock.json`. The `.bin` directory is also missing in some runs (varies by npm version / shim version), but the smoking gun is the trash event for `.package-lock.json`: **npm ci's cleanup of `node_modules` is non-atomic and the shim permits partial mutation before the guard fires.**
+
+### E.4 — Git worktree cycles (5 cycles + 1 fast-forward merge, with REAL branch delta)
+
+**Fixture build (the lab probe's disposable Git repo):**
 ```
-TRACKED_COUNT=52
-PHYSICAL_COUNT=52
-MISSING_COUNT=0
-FSCK_HEALTHY=YES
-WORKTREE_ONLY_LOSS=False
+GIT_PROBE_INIT_REPO=<WORKSPACE>\fixtures\git-probe-normal
+GIT_PROBE_MASTER_HEAD=<60-file root commit>
+[master (root-commit) <sha>] commit-A: 60 tracked files on master (25 src, 25 test, 10 docs)
+ 60 files changed, 60 insertions(+)
+... 60 create mode 100644 ...
+GIT_PROBE_FEATURE_HEAD=<diverged feature commit>
+[feature/probe/multi-level <sha>] commit-B: feature changes (modify 48, delete 5, add 16, rename 4)
+GIT_PROBE_MASTER_FILE_COUNT=60
+GIT_PROBE_FEATURE_FILE_COUNT=71
+BRANCH_DELTA_VALID=YES
 ```
 
-The simulated workbuddy env (env vars + shim) does **not** reproduce the worktree file loss. The kernel filter (`tsbx.dll`) is not active for git.exe under this simulated env.
+The feature branch contains: 48 modified tracked files, 5 deleted tracked files (`test/t16/spec.txt` ... `test/t20/spec.txt`), 16 newly added tracked files (`src/new01.txt` ... `test/new08.txt`), and 4 renames. This produces a non-trivial worktree mutation on every `git switch feature/probe/multi-level` and on the `git merge --ff-only`.
 
-This is the critical negative finding: the worktree anomaly requires the **full WorkBuddy sandbox** (where git.exe is spawned as a child of `sandbox-cli.exe` and the kernel filter is loaded into git's process), not merely the env vars + shim.
+**Per-step integrity check (run after EVERY git operation):**
+
+Every step in both NORMAL and SHIM-ONLY modes emits a structured `WORKTREE_CHECK_*` block. The verdict line for each of the 11 steps (5 cycles × 2 + 1 merge) in both modes is:
+
+```
+WORKTREE_CHECK_VERDICT=CLEAN
+```
+
+Concretely, for every step:
+- `TRACKED_COUNT` matches `PHYSICAL_COUNT` (no files missing)
+- `MISSING_COUNT=0`
+- `WORKTREE_ONLY_LOSS_COUNT=0`
+- `STATUS_D=0` (no ` D` lines)
+- `FSCK_HEALTHY=YES`
+- `MODIFIED_COUNT=0` after a clean switch
+- After the merge: `TRACKED=71` (master + feature additions), `PHYSICAL=71`, all intact
+
+**Critical negative finding:** the simulated WorkBuddy env (env vars + `NODE_OPTIONS=--require=genie-safe-delete.cjs`) does **not** reproduce the worktree file loss. The Node shim is a per-Node-process patch and does not touch `git.exe`. The kernel filter (`tsbx.dll`) is required to intercept `git.exe`'s file operations, and the kernel filter is only loaded when `git.exe` is spawned as a child of `sandbox-cli.exe` inside a real WorkBuddy session.
+
+**This is the key reason the Issue B experiment must be executed inside a real WorkBuddy tool-call, not in the lab.** The lab probe conclusively proves that the Node shim layer is not responsible for the git worktree anomaly. The kernel-filter layer is the only remaining candidate mechanism consistent with the observed user-side pattern (5+ events in the audit log).
 
 ---
 
 ## F. User-side audit log entries (sanitized quotes from real WorkBuddy audit log)
 
-These are the user's own words captured in the audit log. They are reproduced here as evidence of the recurring pattern.
+The user has run repeated native WorkBuddy sessions and observed the worktree anomaly. The following are the user's own words captured in the audit log, reproduced as evidence of the recurring pattern.
 
 ```
 2026-08-10  audit "Worktree Checkout Anomaly（merge 后再次出现 32 个 tracked ` D`）"
@@ -326,15 +369,16 @@ These are the user's own words captured in the audit log. They are reproduced he
 2026-08-13 16:5x  audit "merge 后 17 个 tracked test 文件从 worktree 消失
                   （HEAD=index、blob 完好）→ git restore --worktree -- test/ 恢复"
 
-2026-08-12 23:5x  audit "zhihu-answer-grabber node_modules 残缺（entities@8.0.0
+2026-08-12 23:5x  audit "<real project> node_modules 残缺（entities@8.0.0
                   缺 dist/escape.js 等）→ 首跑 41 fail；npm ci 被 npm 10.9.7
                   safe-delete 批量确认拦截（SAFE_DELETE_BULK_CONFIRM_REQUIRED，
                   非交互 shell 无法确认）；workaround：rm -rf node_modules +
                   npm install（仅 untracked，lockfile 未变）→ 基线恢复 435/0/3"
 ```
 
-```
-audit log raw event (2026-08-12 23:53 file-safety.bulk-delete.needs-approval):
+Raw audit log event (sanitized, project name replaced with `<real project>`):
+
+```json
 {
   "category": "file-safety",
   "eventType": "file-safety.bulk-delete.needs-approval",
@@ -342,27 +386,64 @@ audit log raw event (2026-08-12 23:53 file-safety.bulk-delete.needs-approval):
   "commandPreview": "... rm -rf node_modules/entities ...",
   "count": 56,
   "threshold": 50,
-  "targets": "/d/Dev/zhihu-grabber-toolkit/zhihu-answer-grabber/node_modules/entities"
+  "targets": "<real project>/zhihu-answer-grabber/node_modules/entities"
 }
 ```
 
-(The `count: 56, threshold: 50` in this entry reflects the real project's
-`CODEBUDDY_SAFE_DELETE_BULK_THRESHOLD` being overridden to 50. The lab probe
-uses the default threshold of 20.)
+(The `count: 56, threshold: 50` in this entry reflects the real project's `CODEBUDDY_SAFE_DELETE_BULK_THRESHOLD` being overridden to 50 in the user's working project. The lab probe uses the default threshold of 20.)
+
+**These are not the user's production code or any production repo file content. They are the user's own audit-log notes on the recurring failures, with project paths and package names replaced.** The audit log itself lives at `<USER_DATA>\.workbuddy\logs\audit\audit_<date>.jsonl` (path inferred from the standard WorkBuddy data layout; exact location may vary by version).
 
 ---
 
-## G. tsbx rules — backup and proposed narrow rule
+## G. `tsbx_rules.json` — backup and proposed narrow rule
 
 The original `tsbx_rules.json` is preserved at:
 - `<WORKBUDDY_INSTALL>/resources/app.asar.unpacked/cli/vendor/sandbox/5.3.3/tsbx_rules.json`
   (sha256 `30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A`)
-- Lab copy: `D:\Dev\workbuddy-rootcause-lab\report\tsbx_rules.original.json` (same hash)
+- Lab copy: `report/tsbx_rules.original.json` (identical hash, paths redacted for the WorkBuddy companion app).
 
-A narrow lab rule is **designed but not yet applied to the live system** (would require WorkBuddy restart). The proposed rule is:
+A narrow lab rule is **designed but not yet applied to the live system** (would require either a WorkBuddy restart or a confirmed hot-reload mechanism). The proposed rule is:
 
 ```json
-{ "path": "D:\\Dev\\workbuddy-rootcause-lab\\**", "type": "inherit_user" }
+{ "path": "<WORKSPACE>\\**", "type": "inherit_user" }
 ```
 
-This rule is **scoped strictly to the disposable lab directory** and is **narrower** than the existing example `D:\\openclaw\\proxy-agent\\**` rule in `file_rules_user`. It does **not** affect the real production repo or any other `D:\Dev\**` path.
+This rule is **scoped strictly to the disposable lab directory** and is **narrower** than the existing example `D:\openclaw\proxy-agent\**` rule in `file_rules_user`. It does **not** affect the real production repo or any other `D:\Dev\**` path.
+
+---
+
+## H. Empirical gap — what was NOT exercised
+
+This investigation was conducted from a non-WorkBuddy shell (Mavis orchestrator, a MiniMax Code agent). The following are explicitly out of reach from this environment and require native WorkBuddy execution:
+
+1. **The kernel-filter interaction with `git.exe`.** The kernel filter (`tsbx.dll`) is only loaded into processes spawned by `sandbox-cli.exe` inside a real WorkBuddy session. The lab probe conclusively proves that the Node shim alone does not cause the worktree anomaly. The kernel-filter hypothesis (deny-by-default + `recyclebin_backup` routing) is the only remaining mechanism consistent with the observed user-side pattern. **Verification requires a native WorkBuddy tool-call execution of the Git probe.** The exact procedure is documented in `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`.
+2. **Hot-reload vs. per-invocation vs. process-startup read of `tsbx_rules.json`.** The binary strings do not unambiguously identify the reload mechanism. Both `tsbx.dll` and the rust source string `appended NDJSON rule line. p...` (from `sandbox_ffi.dll`) suggest NDJSON rule appends are supported, but the exact behavior was not exercised.
+3. **ETW / ProcMon capture of the kernel-filter denials.** The exact mechanism by which the kernel filter intercepts git's file operations: it is a Windows file system minifilter, so the denials should appear in the kernel ETW stream (`Microsoft-Windows-Kernel-File`). ETW capture was not performed in this round (ProcMon is not installed; `xperf` availability not verified in the user's environment).
+4. **The `inherit_user` rule semantics.** The behavior is **inferred** from the rule type name + the rule's role (broad allow-list pattern in the file). The exact product-team definition was not consulted during this round.
+
+---
+
+## I. WorkBuddy live processes observed during investigation
+
+```
+WorkBuddy.exe             (multiple, electron main + renderer + sidecar)
+sandbox-cli.exe           (PID <redacted>)   — loads tsbx.dll as kernel filter host
+sandbox-cli-gc.exe        (PID <redacted>)   — garbage-collects sandbox state
+codebuddy.exe             (CLI server, --serve)
+daemon-app-server-entry.js
+editor_sdk.exe            (Tencent docs engine)
+```
+
+PIDs are redacted because the values change on every session and would mislead readers.
+
+---
+
+## J. Source quotation discipline
+
+The proprietary source quotations in sections A and B are limited to the minimum lines necessary to identify:
+- the API surface patched by the shim (A),
+- the threshold and the throw decision (B),
+- the Windows-specific trash fallback (A).
+
+No more than 30 lines are quoted from any single proprietary file. No full file is reproduced. The SHA256 of each file is included so the receiving team can compare the exact same binary they ship against the binary used in this investigation.

@@ -1,0 +1,54 @@
+﻿
+NPM_CI_PROBE=<WORKSPACE>\npm-probe
+NPM_CI_WORKBUDDY_INSTALL=D:\WORKBUDDY
+
+==== PHASE 1: NORMAL (no WorkBuddy shim) ====
+NPM_CI_PHASE1_ENV_CLEAN=yes
+NPM_CI_PHASE1_BEFORE_FILE_COUNT=2
+NPM_CI_PHASE1_INSTALL_CMD=npm install --no-audit --no-fund
+NPM_CI_PHASE1_INSTALL_EXIT=0
+NPM_CI_PHASE1_INSTALL_MANIFEST_FILE_COUNT=92
+NPM_CI_PHASE1_CI_CMD=npm ci --no-audit --no-fund
+NPM_CI_PHASE1_CI_EXIT=0
+NPM_CI_PHASE1_CI_OUTPUT_HEAD=added 2 packages in 1s
+NPM_CI_PHASE1_POST_FILE_COUNT=92
+NPM_CI_PHASE1_CRITICAL_PARSE5=True
+NPM_CI_PHASE1_CRITICAL_ENTITIES_ESCAPE=True
+
+==== PHASE 2: WORKBUDDY SHIM (env + shim active) ====
+NPM_CI_PHASE2_SHIM_INJECTED=yes
+NPM_CI_PHASE2_BEFORE_FILE_COUNT=3
+NPM_CI_PHASE2_INSTALL_CMD=npm install --no-audit --no-fund
+NPM_CI_PHASE2_INSTALL_EXIT=0
+NPM_CI_PHASE2_INSTALL_MANIFEST_FILE_COUNT=92
+NPM_CI_PHASE2_CI_CMD=npm ci --no-audit --no-fund
+NPM_CI_PHASE2_CI_EXIT=1
+NPM_CI_PHASE2_CI_OUTPUT_HEAD=npm.cmd : npm error [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":59,"threshold":20,"scope":"turn","targets
+ | ":["D:\\Dev\\workbuddy-rootcause-lab\\npm-probe\\node_modules\\entities"],"targetCount":1}
+ | At <WORKSPACE>\bin\repro-npm-ci.ps1:140 char:22
+ | +         $phase2Out = & npm.cmd ci --no-audit --no-fund 2>&1 | Out-Str ...
+ | +                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+NPM_CI_PHASE2_BULK_GUARD_TRIGGERED=yes
+NPM_CI_PHASE2_BULK_GUARD_MARKER=npm.cmd : npm error [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":59,"threshold":20,"scope":"turn","targets
+":["D:\\Dev\\workbuddy-rootcause-lab\\npm-probe\\node_modules\\entities"],"targetCount":1}
+At <WORKSPACE>\bin\repro-npm-ci.ps1:140 char:22
++         $phase2Out = & npm.cmd ci --no-audit --no-fund 2>&1 | Out-Str ...
++                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (npm error [safe...targetCount":1}:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+npm error A complete log of this run can be found in: <USER_PROFILE>\AppData\Local\npm-cache\_logs\2026-08-13T15_55_34_60
+3Z-debug-0.log
+
+NPM_CI_PHASE2_POST_FILE_COUNT=91
+NPM_CI_PHASE2_CRITICAL_PARSE5=True
+NPM_CI_PHASE2_CRITICAL_ENTITIES_ESCAPE=True
+NPM_CI_PHASE2_SHIM_REPORT_TRIES=1
+NPM_CI_PHASE2_SHIM_REPORT_REASON=unknown
+NPM_CI_PHASE2_SHIM_TRASH_EVENT 1786636537186 op=trash runtime=node path=<WORKSPACE>\npm-probe\node_modules\.package-lock.json
+
+==== SUMMARY ====
+NPM_CI_PHASE1_RESULT=ok-or-fail
+NPM_CI_PHASE2_RESULT=ok-or-blocked
+NPM_CI_END

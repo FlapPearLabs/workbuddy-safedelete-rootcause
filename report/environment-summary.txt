@@ -1,4 +1,4 @@
-================================================================================
+﻿================================================================================
 ENVIRONMENT SUMMARY (sanitized, no PII)
 ================================================================================
 
@@ -41,14 +41,17 @@ WORKBUDDY tsbx RULES (tsbx_rules.json)
 
 WORKBUDDY RUNTIME PROCESSES (observed during investigation)
   WorkBuddy.exe             (multiple, electron main + renderer + sidecar)
-  sandbox-cli.exe           (PID 4924)   — loads tsbx.dll as kernel filter host
-  sandbox-cli-gc.exe        (PID 23076)  — garbage-collects sandbox state
+  sandbox-cli.exe           (PID <redacted>)   — loads tsbx.dll as kernel filter host
+  sandbox-cli-gc.exe        (PID <redacted>)   — garbage-collects sandbox state
   codebuddy.exe             (CLI server, --serve)
   daemon-app-server-entry.js
   editor_sdk.exe            (Tencent docs engine)
 
 LAB ENVIRONMENT
-  Lab root       : D:\Dev\workbuddy-rootcause-lab
-  Control root   : <TEMP>/workbuddy-rootcause-control
+  Lab root       : <WORKSPACE>          (auto-resolved by bin/_lib.ps1 from script's own path)
+  Control root   : <TEMP>\workbuddy-rootcause-control
+  npm probe      : <WORKSPACE>\npm-probe (committed: package.json + lockfile)
+  Fixture dir    : <WORKSPACE>\fixtures (gitignored; built fresh by bin/build-*.ps1)
+  Output dir     : <WORKSPACE>\work     (gitignored; one subdir per orchestrator run)
 
 ================================================================================

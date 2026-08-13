@@ -1,9 +1,1 @@
-﻿{
-  "name": "npm-probe",
-  "version": "1.0.0",
-  "private": true,
-  "dependencies": {
-    "parse5": "8.0.1",
-    "entities": "8.0.0"
-  }
-}
+﻿{"name":"npm-probe","version":"1.0.0","private":true,"description":"Disposable npm fixture for WorkBuddy safe-delete bulk-guard repro. parse5@8.0.1 + entities@8.0.0 are the same versions that triggered the parse5/entities incomplete state in the user production repo.","dependencies":{"parse5":"8.0.1","entities":"8.0.0"}}
