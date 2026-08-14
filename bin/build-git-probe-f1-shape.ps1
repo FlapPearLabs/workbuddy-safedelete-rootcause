@@ -40,6 +40,9 @@ param(
     [Parameter(Mandatory=$true)][string]$Repo,
     [string]$BranchName = 'feature/probe/f1-shape'
 )
+# Resolve to an absolute path so check-worktree (which re-pushes into $Repo)
+# is robust regardless of the caller's current location.
+$Repo = [System.IO.Path]::GetFullPath($Repo)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '_lib.ps1')
 
@@ -159,7 +162,73 @@ try {
         throw ("build-git-probe-f1-shape: shape invalid (base=" + (git ls-files | Measure-Object).Count + ">=" + $MIN_BASE_TRACKED + " testLike=" + $testLikeCount + ">=" + $MIN_TEST_LIKE + " changed=" + ($modified + $deleted + $added) + "==" + $REQUIRED_CHANGED + " deleted=" + $deleted + "==" + $REQUIRED_DELETED + " added=" + $added + "==" + $REQUIRED_ADDED + " modified=" + $modified + "==" + $REQUIRED_MODIFIED + ")")
     }
 
-    git checkout master 2>&1 | Out-Null
+    # ── REPAIR A: post-build physical baseline on master ──
+    # Run check-worktree immediately after the final `git checkout master`
+    # so the orchestrator can distinguish a build-phase loss (P1-1 CASE A)
+    # from a first-cycle-checkout loss (P1-1 CASE B). A structurally valid
+    # 3-path diff alone is NOT sufficient for WORKTREE_READY=YES.
+    $prevEAP2 = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    $null = git checkout master 2>&1 | Out-String
+    $buildFinalCheckoutExit = $LASTEXITCODE
+    $ErrorActionPreference = $prevEAP2
+
+    $buildFinalExpectedBranch = 'master'
+    $buildFinalExpectedHead   = $masterHead
+    $buildFinalActualBranch   = (git rev-parse --abbrev-ref HEAD 2>$null)
+    $buildFinalActualHead     = (git rev-parse HEAD 2>$null)
+    $buildFinalTargetReached  = if (($buildFinalActualBranch -eq 'master') -and ($buildFinalActualHead -eq $buildFinalExpectedHead)) { 'YES' } else { 'NO' }
+
+    Write-Output ("BUILD_FINAL_CHECKOUT_EXIT=" + $buildFinalCheckoutExit)
+    Write-Output ("BUILD_FINAL_EXPECTED_BRANCH=" + $buildFinalExpectedBranch)
+    Write-Output ("BUILD_FINAL_ACTUAL_BRANCH=" + $buildFinalActualBranch)
+    Write-Output ("BUILD_FINAL_EXPECTED_HEAD=" + $buildFinalExpectedHead)
+    Write-Output ("BUILD_FINAL_ACTUAL_HEAD=" + $buildFinalActualHead)
+    Write-Output ("BUILD_FINAL_TARGET_REACHED=" + $buildFinalTargetReached)
+
+    # Full WORKTREE_CHECK_* record for the post-build master baseline.
+    $buildFinalCheckOut = $null
+    try {
+        $buildFinalCheckOut = & "$PSScriptRoot\check-worktree.ps1" -Repo $Repo -Label 'build-final-master-baseline' 2>&1
+    } catch {
+        Write-Output ("WORKTREE_CHECK_SCRIPT_ERROR label=build-final-master-baseline type=" + $_.Exception.GetType().FullName + " message=" + $_.Exception.Message)
+        $buildFinalCheckOut = @()
+    }
+    if ($buildFinalCheckOut) { foreach ($l in $buildFinalCheckOut) { Write-Output $l } }
+
+    $finalVerdict = 'UNKNOWN'; $finalMissing = -1; $finalMatch = 'NO'; $finalFsck = 'NO'
+    if ($buildFinalCheckOut) {
+        foreach ($l in $buildFinalCheckOut) {
+            if ($l -match '^WORKTREE_CHECK_VERDICT\s+label=build-final-master-baseline\s+value=(\S+)') { $finalVerdict = $matches[1] }
+            elseif ($l -match '^WORKTREE_CHECK_MISSING_COUNT=(\d+)') { $finalMissing = [int]$matches[1] }
+            elseif ($l -match '^WORKTREE_CHECK_HEAD_INDEX_TREE_MATCH=(\S+)') { $finalMatch = $matches[1] }
+            elseif ($l -match '^WORKTREE_CHECK_FSCK_HEALTHY=(\S+)') { $finalFsck = $matches[1] }
+        }
+    }
+
+    Write-Output ("GIT_PROBE_F1_SHAPE_FINAL_WORKTREE_VERDICT=" + $finalVerdict)
+    Write-Output ("GIT_PROBE_F1_SHAPE_FINAL_MISSING_COUNT=" + $finalMissing)
+    Write-Output ("GIT_PROBE_F1_SHAPE_FINAL_HEAD_INDEX_TREE_MATCH=" + $finalMatch)
+    Write-Output ("GIT_PROBE_F1_SHAPE_FINAL_FSCK_HEALTHY=" + $finalFsck)
+
+    # WORKTREE_READY=YES requires a clean physical master worktree on top of a
+    # structurally valid 3-path diff. Otherwise the caller MUST NOT start cycles.
+    $buildFinalReady = $false
+    if (($buildFinalCheckoutExit -eq 0) -and
+        ($buildFinalTargetReached -eq 'YES') -and
+        ($finalVerdict -eq 'CLEAN') -and
+        ($finalMissing -eq 0) -and
+        ($finalMatch -eq 'YES') -and
+        ($finalFsck -eq 'YES')) {
+        $buildFinalReady = $true
+    }
+    Write-Output ("GIT_PROBE_F1_SHAPE_WORKTREE_READY=" + $(if ($buildFinalReady) { 'YES' } else { 'NO' }))
+    if (-not $buildFinalReady) {
+        # Localization signal: the build sequence itself left the master
+        # worktree non-clean. Caller must treat this as BUILD_FINAL_WORKTREE_INTERFERENCE
+        # and preserve evidence; do NOT start mutation cycles.
+        Write-Output "GIT_PROBE_F1_SHAPE_BUILD_FINAL_WORKTREE_INTERFERENCE=YES"
+    }
+
     $ErrorActionPreference = $prevEAP
 } finally {
     Pop-Location

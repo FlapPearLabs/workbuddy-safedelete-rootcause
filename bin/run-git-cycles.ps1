@@ -8,21 +8,28 @@
 # operation interferes (non-zero exit OR target branch/HEAD mismatch) but
 # still records the post-op state via check-worktree before bailing.
 #
+# Evidence-localization repairs (2026-08-14):
+#   REPAIR B: a step-0 pre-operation physical baseline (check-worktree with
+#     label step-0-pre-operation-baseline) runs BEFORE any mutation. It is NOT
+#     one of the 11 mutation checks. If it is not CLEAN, step-1a is never
+#     executed and the broken state is classified PREEXISTING_NON_CLEAN
+#     (so it cannot be falsely attributed to a mutation).
+#   REPAIR C: the runner is wrapped in try/catch/finally and ALWAYS emits the
+#     structured finalization markers (including GIT_CYCLES_END), even on
+#     exception. A check-worktree failure is recorded (WORKTREE_CHECK_SCRIPT_ERROR)
+#     and is never hidden.
+#
 # Usage:
 #   .\run-git-cycles.ps1 -Repo <path> -Cycles 5 -OutputFile <path> [-Merge $true]
 #
-# Total expected check count for Cycles=5, Merge=$true is:
+# Total expected mutation-check count for Cycles=5, Merge=$true is:
 #   5 switch-to-feature + 5 switch-to-master + 1 merge = 11
+# Plus exactly 1 baseline check (step-0-pre-operation-baseline) outside that count.
 #
 # For each checkout, the EXPECTED_HEAD is resolved from
 # `git rev-parse <target branch>` BEFORE the operation. The op is
 # declared TARGET_REACHED only if exit=0 AND actualBranch=expectedBranch
 # AND actualHead=expectedHead.
-#
-# For the ff-only merge, the EXPECTED_HEAD is the tip of
-# feature/probe/multi-level BEFORE the merge (since the merge moves
-# master to that tip). TARGET_REACHED requires exit=0 AND
-# actualBranch=master AND actualHead=expectedHead.
 
 [CmdletBinding()]
 param(
@@ -52,12 +59,21 @@ function Record {
 # Compute expected checker count up-front so we can assert at the end.
 # 5 switch-to-feature + 5 switch-to-master + 1 merge = 11.
 $expectedChecks = (2 * $Cycles) + $(if ($Merge) { 1 } else { 0 })
+
+# REPAIR B: distinguish mutation checks from the single pre-op baseline check.
 Record ("GIT_CYCLES_START repo=" + $Repo + " cycles=" + $Cycles + " merge=" + $Merge)
-Record ("GIT_CYCLES_EXPECTED_CHECK_COUNT=" + $expectedChecks)
+Record ("GIT_CYCLES_EXPECTED_CHECK_COUNT=" + $expectedChecks)              # retained for compatibility
+Record ("GIT_CYCLES_EXPECTED_MUTATION_CHECK_COUNT=" + $expectedChecks)
+Record ("GIT_CYCLES_BASELINE_CHECK_COUNT=1")
 
 $script:actualCheckCount = 0
 $script:operationInterference = $false
 $script:interferenceStep = ''
+$script:aborted = $false
+$script:abortStage = ''
+$script:abortExceptionType = ''
+$script:abortExceptionMessage = ''
+$script:currentStage = ''
 
 function Run-Operation {
     param(
@@ -73,6 +89,7 @@ function Run-Operation {
         [string[]]$GitArgs
     )
     $script:actualCheckCount++
+    $script:currentStage = $Label
 
     # Resolve the real expected head BEFORE the op. For a switch, this
     # is the tip of the target branch. For an ff-only merge, this is the
@@ -121,8 +138,18 @@ function Run-Operation {
     $targetReached = if ($branchReached -and $headReached) { 'YES' } else { 'NO' }
     Record ("GIT_OPERATION_TARGET_REACHED=" + $targetReached)
 
-    # Always run check-worktree immediately to preserve state.
-    & "$PSScriptRoot\check-worktree.ps1" -Repo $Repo -Label $Label | ForEach-Object { Record $_ }
+    # REPAIR C: never let a check-worktree failure hide or trigger silent
+    # mid-record exit. Record it, then stop further mutations.
+    try {
+        & "$PSScriptRoot\check-worktree.ps1" -Repo $Repo -Label $Label | ForEach-Object { Record $_ }
+    } catch {
+        Record ("WORKTREE_CHECK_SCRIPT_ERROR label=" + $Label + " type=" + $_.Exception.GetType().FullName + " message=" + $_.Exception.Message)
+        $script:aborted = $true
+        $script:abortStage = $Label
+        $script:abortExceptionType = $_.Exception.GetType().FullName
+        $script:abortExceptionMessage = $_.Exception.Message
+        throw
+    }
 
     if ($exit -ne 0 -or $targetReached -ne 'YES') {
         Record ("GIT_OPERATION_INTERFERENCE label=" + $Label + " exit=" + $exit + " target_reached=" + $targetReached + " branch_reached=" + $branchReached + " head_reached=" + $headReached)
@@ -135,32 +162,86 @@ function Run-Operation {
 
 Push-Location $Repo
 try {
-    Record ("GIT_CYCLE_BASELINE_REPO=" + $Repo)
-    Record ("GIT_CYCLE_BASELINE_HEAD=" + (git rev-parse HEAD))
-    Record ("GIT_CYCLE_BASELINE_BRANCH=" + (git rev-parse --abbrev-ref HEAD))
+    try {
+        Record ("GIT_CYCLE_BASELINE_REPO=" + $Repo)
+        Record ("GIT_CYCLE_BASELINE_HEAD=" + (git rev-parse HEAD))
+        Record ("GIT_CYCLE_BASELINE_BRANCH=" + (git rev-parse --abbrev-ref HEAD))
 
-    for ($i = 1; $i -le $Cycles; $i++) {
-        $featureTip = git rev-parse $BranchName 2>$null
-        $ok = Run-Operation -Type 'checkout' -Label "step-${i}a-switch-to-feature" -Target $BranchName -ExpectedBranch $BranchName -ExpectedHeadOverride $featureTip -GitArgs @('checkout',$BranchName)
-        if (-not $ok) { break }
-        $masterTip = git rev-parse master 2>$null
-        $ok = Run-Operation -Type 'checkout' -Label "step-${i}b-switch-to-master" -Target 'master' -ExpectedBranch 'master' -ExpectedHeadOverride $masterTip -GitArgs @('checkout','master')
-        if (-not $ok) { break }
-    }
+        # REPAIR B: step-0 pre-operation physical baseline (NOT a mutation check).
+        $preopLines = @()
+        try {
+            $preopLines = & "$PSScriptRoot\check-worktree.ps1" -Repo $Repo -Label 'step-0-pre-operation-baseline' 2>&1
+        } catch {
+            Record ("WORKTREE_CHECK_SCRIPT_ERROR label=step-0-pre-operation-baseline type=" + $_.Exception.GetType().FullName + " message=" + $_.Exception.Message)
+            $script:aborted = $true
+            $script:abortStage = 'step-0-pre-operation-baseline'
+            $script:abortExceptionType = $_.Exception.GetType().FullName
+            $script:abortExceptionMessage = $_.Exception.Message
+            throw
+        }
+        $preopVerdict = 'UNKNOWN'; $preopMissing = -1; $preopMatch = 'NO'; $preopFsck = 'NO'
+        foreach ($l in $preopLines) {
+            if ($l -match '^WORKTREE_CHECK_VERDICT\s+label=step-0-pre-operation-baseline\s+value=(\S+)') { $preopVerdict = $matches[1] }
+            elseif ($l -match '^WORKTREE_CHECK_MISSING_COUNT=(\d+)') { $preopMissing = [int]$matches[1] }
+            elseif ($l -match '^WORKTREE_CHECK_HEAD_INDEX_TREE_MATCH=(\S+)') { $preopMatch = $matches[1] }
+            elseif ($l -match '^WORKTREE_CHECK_FSCK_HEALTHY=(\S+)') { $preopFsck = $matches[1] }
+            Record $l
+        }
+        Record ("GIT_CYCLES_PREOP_BASELINE_VERDICT=" + $preopVerdict)
+        Record ("GIT_CYCLES_PREOP_BASELINE_MISSING_COUNT=" + $preopMissing)
+        Record ("GIT_CYCLES_PREOP_BASELINE_HEAD_INDEX_TREE_MATCH=" + $preopMatch)
+        Record ("GIT_CYCLES_PREOP_BASELINE_FSCK_HEALTHY=" + $preopFsck)
 
-    if ($Merge -and -not $script:operationInterference) {
-        # For the ff-only merge, the expected post-merge HEAD is the
-        # tip of feature/probe/multi-level BEFORE the merge.
-        $featureTipForMerge = git rev-parse $BranchName 2>$null
-        $ok = Run-Operation -Type 'merge' -Label 'step-merge-ff-only' -Target 'merge ff-only feature into master' -ExpectedBranch 'master' -ExpectedHeadOverride $featureTipForMerge -GitArgs @('merge','--ff-only',$BranchName)
-        if (-not $ok) { }
+        $skipMutations = $false
+        if ($preopVerdict -ne 'CLEAN') {
+            # Do NOT attribute an already-broken worktree to step-1a.
+            Record ("GIT_OPERATION_INTERFERENCE stage=preop-baseline classification=PREEXISTING_NON_CLEAN verdict=" + $preopVerdict + " missing=" + $preopMissing)
+            $script:operationInterference = $true
+            $script:interferenceStep = 'preop-baseline'
+            $skipMutations = $true
+        }
+
+        if (-not $skipMutations) {
+            for ($i = 1; $i -le $Cycles; $i++) {
+                $featureTip = git rev-parse $BranchName 2>$null
+                $ok = Run-Operation -Type 'checkout' -Label "step-${i}a-switch-to-feature" -Target $BranchName -ExpectedBranch $BranchName -ExpectedHeadOverride $featureTip -GitArgs @('checkout',$BranchName)
+                if (-not $ok) { break }
+                $masterTip = git rev-parse master 2>$null
+                $ok = Run-Operation -Type 'checkout' -Label "step-${i}b-switch-to-master" -Target 'master' -ExpectedBranch 'master' -ExpectedHeadOverride $masterTip -GitArgs @('checkout','master')
+                if (-not $ok) { break }
+            }
+
+            if ($Merge -and -not $script:operationInterference) {
+                # For the ff-only merge, the expected post-merge HEAD is the
+                # tip of the feature branch BEFORE the merge.
+                $featureTipForMerge = git rev-parse $BranchName 2>$null
+                $ok = Run-Operation -Type 'merge' -Label 'step-merge-ff-only' -Target 'merge ff-only feature into master' -ExpectedBranch 'master' -ExpectedHeadOverride $featureTipForMerge -GitArgs @('merge','--ff-only',$BranchName)
+                if (-not $ok) { }
+            }
+        }
     }
-} finally {
+    catch {
+        # REPAIR C: structured abort capture. Preserve evidence, do not hide.
+        $script:aborted = $true
+        $script:abortStage = $script:currentStage
+        $script:abortExceptionType = $_.Exception.GetType().FullName
+        $script:abortExceptionMessage = $_.Exception.Message
+        Record ("GIT_CYCLES_ABORT stage=" + $script:abortStage + " type=" + $script:abortExceptionType + " message=" + $script:abortExceptionMessage)
+    }
+}
+finally {
     Pop-Location
 }
 
-Record ("GIT_CYCLES_ACTUAL_CHECK_COUNT=" + $script:actualCheckCount)
-Record ("GIT_CYCLES_OK=" + $(if ($script:operationInterference) {'NO'} else {'YES'}))
+# REPAIR C: finalization ALWAYS runs, regardless of success or failure.
+Record ("GIT_CYCLES_EXPECTED_MUTATION_CHECK_COUNT=" + $expectedChecks)
+Record ("GIT_CYCLES_ACTUAL_MUTATION_CHECK_COUNT=" + $script:actualCheckCount)
+Record ("GIT_CYCLES_BASELINE_CHECK_COUNT=1")
+Record ("GIT_CYCLES_ABORTED=" + $(if ($script:aborted) {'YES'} else {'NO'}))
+Record ("GIT_CYCLES_ABORT_STAGE=" + $script:abortStage)
+Record ("GIT_CYCLES_ABORT_EXCEPTION_TYPE=" + $script:abortExceptionType)
+Record ("GIT_CYCLES_ABORT_EXCEPTION_MESSAGE=" + $script:abortExceptionMessage)
+Record ("GIT_CYCLES_OK=" + $(if ($script:operationInterference -or $script:aborted) {'NO'} else {'YES'}))
 if ($script:operationInterference) {
     Record ("GIT_CYCLES_INTERFERENCE_STEP=" + $script:interferenceStep)
 }
