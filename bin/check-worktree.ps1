@@ -10,7 +10,14 @@
 #     INDEX_AND_WORKTREE_LOSS         (HEAD=yes, INDEX=no,  PHYSICAL=no)
 #     INDEX_ONLY_DIVERGENCE           (HEAD=yes, INDEX=no,  PHYSICAL=yes)
 #     INDEX_ADDITION_PHYSICAL_MISSING (HEAD=no,  INDEX=yes, PHYSICAL=no)
+#     WORKTREE_CONTENT_DIVERGENCE     (HEAD=yes, INDEX=yes, PHYSICAL=yes, INDEX_BLOB != PHYSICAL_BLOB)
 #     OTHER_STATE_DIVERGENCE          (anything else)
+#
+#   physical content integrity: for every path that is INDEX_PRESENT=yes
+#   AND PHYSICAL_PRESENT=yes, compare
+#     INDEX_BLOB_SHA    = git rev-parse ":<path>"
+#     PHYSICAL_BLOB_SHA = git hash-object -- "<path>"
+#   Mismatch is recorded and forces a non-CLEAN verdict.
 #
 #   git status (porcelain v1)
 #   git fsck (no-reflogs)
@@ -21,8 +28,6 @@
 #
 # Usage:
 #   .\check-worktree.ps1 -Repo <path> [-Label "step description"]
-#
-# Output: lines beginning with WORKTREE_CHECK_* for the orchestrator / parser.
 
 [CmdletBinding()]
 param(
@@ -37,21 +42,15 @@ try {
     Write-Output ("WORKTREE_CHECK_HEAD=" + (git rev-parse HEAD))
     Write-Output ("WORKTREE_CHECK_BRANCH=" + (git rev-parse --abbrev-ref HEAD))
 
-    # ─── HEAD root tree (P1-1 fix) ──────────────────────────────────────
-    # Previously: parsed `git ls-tree HEAD` and took the first tree entry
-    # (which is the *root* tree only when the root has a single top-level
-    # tree, and was always fragile). Use the canonical root-tree query.
+    # ─── HEAD root tree ──────────────────────────────────────────────
     $headTree = (git show -s --format=%T HEAD).Trim()
     Write-Output ("WORKTREE_CHECK_HEAD_TREE=" + $headTree)
-
-    # INDEX root tree
     $indexTree = (git write-tree).Trim()
     Write-Output ("WORKTREE_CHECK_INDEX_TREE=" + $indexTree)
-
     $headIndexMatch = if ($headTree -eq $indexTree) { 'YES' } else { 'NO' }
     Write-Output ("WORKTREE_CHECK_HEAD_INDEX_TREE_MATCH=" + $headIndexMatch)
 
-    # ─── HEAD ∪ INDEX enumeration (P1-2 fix) ────────────────────────────
+    # ─── HEAD ∪ INDEX enumeration ────────────────────────────────────
     $headPaths = @(git ls-tree -r --name-only HEAD)
     $indexPaths = @(git ls-files)
     $headSet = New-Object 'System.Collections.Generic.HashSet[string]'
@@ -67,7 +66,7 @@ try {
     Write-Output ("WORKTREE_CHECK_INDEX_PATH_COUNT=" + $indexSet.Count)
     Write-Output ("WORKTREE_CHECK_UNION_PATH_COUNT=" + $union.Count)
 
-    # ─── Per-path classification ────────────────────────────────────────
+    # ─── Per-path classification (round 1: presence-based) ──────────
     $physicalPresent = 0
     $missing = 0
     $classCounts = @{
@@ -76,8 +75,10 @@ try {
         INDEX_AND_WORKTREE_LOSS = 0
         INDEX_ONLY_DIVERGENCE = 0
         INDEX_ADDITION_PHYSICAL_MISSING = 0
+        WORKTREE_CONTENT_DIVERGENCE = 0
         OTHER_STATE_DIVERGENCE = 0
     }
+    $pathsNeedingContentCheck = New-Object 'System.Collections.Generic.List[object]'
 
     foreach ($p in $union) {
         $inHead = $headSet.Contains($p)
@@ -85,39 +86,76 @@ try {
         $phys = Test-Path -LiteralPath $p
         if ($phys) { $physicalPresent++ } else { $missing++ }
 
-        $cls = ''
         if ($inHead -and $inIndex -and $phys) {
-            $cls = 'CLEAN'
-        } elseif ($inHead -and $inIndex -and -not $phys) {
-            $cls = 'WORKTREE_ONLY_LOSS'
-        } elseif ($inHead -and -not $inIndex -and -not $phys) {
-            $cls = 'INDEX_AND_WORKTREE_LOSS'
-        } elseif ($inHead -and -not $inIndex -and $phys) {
-            $cls = 'INDEX_ONLY_DIVERGENCE'
-        } elseif (-not $inHead -and $inIndex -and -not $phys) {
-            $cls = 'INDEX_ADDITION_PHYSICAL_MISSING'
-        } else {
-            # (-not $inHead -and -not $inIndex) shouldn't happen since $p was
-            # drawn from the union; keep the slot for safety.
-            $cls = 'OTHER_STATE_DIVERGENCE'
+            # Provisional CLEAN — will downgrade to WORKTREE_CONTENT_DIVERGENCE
+            # after the content hash check.
+            $pathsNeedingContentCheck.Add($p) | Out-Null
+            $classCounts.CLEAN++
         }
-        $classCounts[$cls]++
+        elseif ($inHead -and $inIndex -and -not $phys) {
+            $classCounts.WORKTREE_ONLY_LOSS++
+        }
+        elseif ($inHead -and -not $inIndex -and -not $phys) {
+            $classCounts.INDEX_AND_WORKTREE_LOSS++
+        }
+        elseif ($inHead -and -not $inIndex -and $phys) {
+            $classCounts.INDEX_ONLY_DIVERGENCE++
+        }
+        elseif (-not $inHead -and $inIndex -and -not $phys) {
+            $classCounts.INDEX_ADDITION_PHYSICAL_MISSING++
+        }
+        else {
+            $classCounts.OTHER_STATE_DIVERGENCE++
+        }
 
-        if ($cls -ne 'CLEAN') {
+        if (($inHead -or $inIndex) -and -not $phys) {
             $headStr = $(if ($inHead)  { 'yes' } else { 'no' })
             $idxStr  = $(if ($inIndex) { 'yes' } else { 'no' })
             $physStr = $(if ($phys)    { 'yes' } else { 'no' })
+            $cls = if ($inHead -and $inIndex) { 'WORKTREE_ONLY_LOSS' }
+                   elseif ($inHead)            { 'INDEX_AND_WORKTREE_LOSS' }
+                   else                       { 'INDEX_ADDITION_PHYSICAL_MISSING' }
             Write-Output ("WORKTREE_CHECK_MISSING label=" + $Label + " classification=" + $cls + " path=" + $p + " head=" + $headStr + " index=" + $idxStr + " physical=" + $physStr)
         }
     }
 
+    # ─── Round 2: content hash check (P2) ─────────────────────────────
+    # For every path that was provisionally CLEAN, compare
+    #   INDEX_BLOB_SHA    = git rev-parse ":<path>"
+    #   PHYSICAL_BLOB_SHA = git hash-object -- "<path>"
+    # A mismatch is recorded and the path is reclassified to
+    # WORKTREE_CONTENT_DIVERGENCE.
+    $contentMismatchCount = 0
+    foreach ($p in $pathsNeedingContentCheck) {
+        # Skip special paths (submodules, symlinks) — git hash-object
+        # refuses them. These are not realistic in this lab's synthetic
+        # fixture; record them as a no-op mismatch if they ever appear.
+        $item = Get-Item -LiteralPath $p -ErrorAction SilentlyContinue
+        if (-not $item -or $item.PSIsContainer) { continue }
+        if ($item.LinkType) { continue }  # symlink
+
+        $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        $indexBlob = (git rev-parse ":`"$p`"" 2>$null).Trim()
+        $physBlob  = (git hash-object -- "$p" 2>$null).Trim()
+        $ErrorActionPreference = $prevEAP
+
+        if (-not $indexBlob -or -not $physBlob) { continue }
+        if ($indexBlob -ne $physBlob) {
+            $contentMismatchCount++
+            $classCounts.CLEAN--
+            $classCounts.WORKTREE_CONTENT_DIVERGENCE++
+            Write-Output ("WORKTREE_CHECK_CONTENT_MISMATCH label=" + $Label + " path=" + $p + " index_blob=" + $indexBlob + " physical_blob=" + $physBlob)
+        }
+    }
+    Write-Output ("WORKTREE_CHECK_CONTENT_MISMATCH_COUNT=" + $contentMismatchCount)
+
     Write-Output ("WORKTREE_CHECK_PHYSICAL_PRESENT_COUNT=" + $physicalPresent)
     Write-Output ("WORKTREE_CHECK_MISSING_COUNT=" + $missing)
-    foreach ($k in @('WORKTREE_ONLY_LOSS','INDEX_AND_WORKTREE_LOSS','INDEX_ONLY_DIVERGENCE','INDEX_ADDITION_PHYSICAL_MISSING','OTHER_STATE_DIVERGENCE')) {
+    foreach ($k in @('WORKTREE_ONLY_LOSS','INDEX_AND_WORKTREE_LOSS','INDEX_ONLY_DIVERGENCE','INDEX_ADDITION_PHYSICAL_MISSING','WORKTREE_CONTENT_DIVERGENCE','OTHER_STATE_DIVERGENCE')) {
         Write-Output ("WORKTREE_CHECK_CLASS_" + $k + "_COUNT=" + $classCounts[$k])
     }
 
-    # ─── git status (porcelain v1) ──────────────────────────────────────
+    # ─── git status (porcelain v1) ───────────────────────────────────
     $statusLines = git status --porcelain=v1 2>$null
     $dCount = 0; $mCount = 0; $uuCount = 0; $aCount = 0
     foreach ($line in $statusLines) {
@@ -134,23 +172,35 @@ try {
         Write-Output ("WORKTREE_CHECK_STATUS_LINE label=" + $Label + " " + $line)
     }
 
-    # ─── git fsck ───────────────────────────────────────────────────────
+    # ─── git fsck ────────────────────────────────────────────────────
     $fsck = git fsck --no-reflogs 2>&1 | Out-String
     $fsckHealthy = 'YES'
     if ($fsck -match 'error|missing object|broken') { $fsckHealthy = 'NO' }
     Write-Output ("WORKTREE_CHECK_FSCK_HEALTHY=" + $fsckHealthy)
     Write-Output ("WORKTREE_CHECK_FSCK_OUTPUT=" + ($fsck.Trim() -replace '\s+', ' '))
 
-    # ─── Verdict (P1-4: label is on the verdict line itself) ────────────
-    # CLEAN iff every path in the union is in (HEAD ∩ INDEX ∩ physical) AND
-    # status has no D entries AND fsck is healthy AND HEAD_TREE == INDEX_TREE.
+    # ─── Verdict ─────────────────────────────────────────────────────
+    # Priority:
+    #   WORKTREE_ONLY_LOSS
+    #   INDEX_AND_WORKTREE_LOSS
+    #   INDEX_ONLY_DIVERGENCE
+    #   INDEX_ADDITION_PHYSICAL_MISSING
+    #   WORKTREE_CONTENT_DIVERGENCE
+    #   OTHER_STATE_DIVERGENCE (incl. fsck bad, HEAD_TREE != INDEX_TREE)
+    #   CLEAN
+    #
+    # A tracked M in git status (with or without content mismatch) also
+    # blocks CLEAN: a tracked modified file is an in-progress worktree
+    # change, not a clean post-op state.
     $verdict = 'CLEAN'
     if ($classCounts.WORKTREE_ONLY_LOSS -gt 0)            { $verdict = 'WORKTREE_ONLY_LOSS' }
     elseif ($classCounts.INDEX_AND_WORKTREE_LOSS -gt 0)   { $verdict = 'INDEX_AND_WORKTREE_LOSS' }
     elseif ($classCounts.INDEX_ONLY_DIVERGENCE -gt 0)      { $verdict = 'INDEX_ONLY_DIVERGENCE' }
     elseif ($classCounts.INDEX_ADDITION_PHYSICAL_MISSING -gt 0) { $verdict = 'INDEX_ADDITION_PHYSICAL_MISSING' }
+    elseif ($classCounts.WORKTREE_CONTENT_DIVERGENCE -gt 0)     { $verdict = 'WORKTREE_CONTENT_DIVERGENCE' }
     elseif ($classCounts.OTHER_STATE_DIVERGENCE -gt 0)     { $verdict = 'OTHER_STATE_DIVERGENCE' }
     elseif ($dCount -gt 0)                                { $verdict = 'WORKTREE_ONLY_LOSS' }
+    elseif ($mCount -gt 0)                                { $verdict = 'WORKTREE_CONTENT_DIVERGENCE' }
     elseif ($fsckHealthy -ne 'YES')                       { $verdict = 'OTHER_STATE_DIVERGENCE' }
     elseif ($headIndexMatch -ne 'YES')                    { $verdict = 'OTHER_STATE_DIVERGENCE' }
     Write-Output ("WORKTREE_CHECK_VERDICT label=" + $Label + " value=" + $verdict)

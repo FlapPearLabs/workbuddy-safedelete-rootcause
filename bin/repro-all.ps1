@@ -77,9 +77,24 @@ $gitProbeShim = Join-Path $repoRoot 'fixtures\git-probe-shim'
 # Reset only the RUNTIME-generated artifacts. The committed fixtures under
 # npm-probe/ (package.json, package-lock.json) are preserved; only node_modules
 # is wiped and regenerated.
+#
+# Per P4, do NOT mavis-trash an old Git probe before the experiment — the
+# F1 natural incident may depend on WorkBuddy's own delete path. The probe
+# scripts now refuse to start if the target path already exists, so the
+# repro-all orchestrator must use a unique dir each time it runs.
+$probeStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+$probeGuid  = [guid]::NewGuid().ToString('N').Substring(0,8)
+$nodeDeleteSmall = Join-Path $repoRoot ("fixtures\node-delete\small-" + $probeStamp + "-" + $probeGuid)
+$nodeDeleteLarge = Join-Path $repoRoot ("fixtures\node-delete\large-" + $probeStamp + "-" + $probeGuid)
+$gitProbeNormal  = Join-Path $repoRoot ("fixtures\git-probe-normal-" + $probeStamp + "-" + $probeGuid)
+$gitProbeShim    = Join-Path $repoRoot ("fixtures\git-probe-shim-" + $probeStamp + "-" + $probeGuid)
+# Per P4, the probe scripts refuse to start if the target path already
+# exists. So the build-git-probe*.ps1 scripts will create the dirs
+# themselves via New-Item -Force. We do NOT pre-create the dirs here.
 foreach ($d in @($nodeDeleteSmall, $nodeDeleteLarge, $gitProbeNormal, $gitProbeShim)) {
-    if (Test-Path $d) { mavis-trash $d }
-    New-Item -ItemType Directory -Path $d -Force | Out-Null
+    if (Test-Path $d) {
+        throw "repro-all: probe dir already exists; per P4 use a fresh unique dir. Path: $d"
+    }
 }
 $npmNodeModules = Join-Path $npmProbe 'node_modules'
 if (Test-Path $npmNodeModules) { mavis-trash $npmNodeModules }

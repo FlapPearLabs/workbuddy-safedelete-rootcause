@@ -46,8 +46,14 @@ $MIN_DELETED  = 5
 $MIN_ADDED    = 16
 $MIN_RENAMED  = 4
 
-# Clean start.
-if (Test-Path $Repo) { mavis-trash $Repo }
+# Per the release-gate P4 rule, do NOT mavis-trash an old Git probe
+# before the experiment. The caller must pass a fresh unique dir
+# (e.g. work/native-runs/<ts-guid>/git-probe). If the caller passes
+# a path that already exists, we refuse rather than trash, so the
+# caller can detect the collision and pick a new name.
+if (Test-Path $Repo) {
+    throw "build-git-probe: target path already exists; per P4 use a fresh unique dir. Path: $Repo"
+}
 New-Item -ItemType Directory -Path $Repo -Force | Out-Null
 Push-Location $Repo
 try {
