@@ -55,8 +55,17 @@ Record "WORKBUDDY_NATIVE_CONTEXT_PROBE_START timestamp=$(Get-Date -Format 'o')"
 $currentPid = $PID
 $currentName = '<unknown>'
 try {
-    $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$currentPid" -ErrorAction SilentlyContinue
-    if ($proc) { $currentName = $proc.Name }
+    $proc = Get-CimInstance Win32_Process -Filter ('ProcessId=' + $currentPid) -ErrorAction SilentlyContinue
+    if ($proc) {
+        $currentName = $proc.Name
+    } else {
+        # Fallback: use Get-Process (which is always available even when
+        # CIM is blocked).
+        try {
+            $gp = Get-Process -Id $currentPid -ErrorAction SilentlyContinue
+            if ($gp) { $currentName = $gp.ProcessName + '.exe' }
+        } catch { }
+    }
 } catch { }
 Record ("CURRENT_PID=" + $currentPid)
 Record ("CURRENT_NAME=" + $currentName)
@@ -73,10 +82,20 @@ $ancestryApi = 'NO'
 $reached = 'NONE'
 $chain = @()
 try {
-    $pid = $currentPid
+    $ppid = $currentPid
     $safety = 0
-    while ($pid -and $safety -lt 32) {
-        $p = Get-CimInstance Win32_Process -Filter "ProcessId=$pid" -ErrorAction SilentlyContinue
+    while ($ppid -and $safety -lt 32) {
+        # Prefer CIM; fall back to Get-Process if CIM is unavailable.
+        $p = $null
+        try {
+            $p = Get-CimInstance Win32_Process -Filter ('ProcessId=' + $ppid) -ErrorAction SilentlyContinue
+        } catch { $p = $null }
+        if (-not $p) {
+            try {
+                $gp = Get-Process -Id $ppid -ErrorAction SilentlyContinue
+                if ($gp) { $p = [PSCustomObject]@{ ProcessId = $gp.Id; Name = $gp.ProcessName + '.exe'; ParentProcessId = (Get-CimInstance Win32_Process -Filter ('ProcessId=' + $ppid) -ErrorAction SilentlyContinue).ParentProcessId } }
+            } catch { $p = $null }
+        }
         if (-not $p) { break }
         $ancestryApi = 'YES'
         $chain += [PSCustomObject]@{ Pid = $p.ProcessId; Name = $p.Name }
@@ -85,8 +104,8 @@ try {
             $reached = $p.Name
             break
         }
-        $pid = [int]$p.ParentProcessId
-        if ($pid -le 0) { break }
+        $ppid = [int]$p.ParentProcessId
+        if ($ppid -le 0) { break }
         $safety++
     }
 } catch {
