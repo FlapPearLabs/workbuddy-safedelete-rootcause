@@ -258,6 +258,66 @@ commits forward.
 
 ---
 
+## Canonical issue architecture
+
+The investigation deliberately splits evidence collection from
+vendor filing. The two repos have different roles:
+
+- **`FlapPearLabs/zhihu-grabber-toolkit`** is the production
+  repository where the natural incident was observed. It is
+  **read-only** for the investigation. The natural incident log
+  (issue-style evidence) lives in this repo's issue tracker (or
+  in `report/NATURAL-INCIDENT-F1.md` in the workbuddy repo for
+  now, until the user opens a tracking issue). It contains the
+  user's project evidence only; it does NOT contain the canonical
+  repro, the safe-delete source code excerpts, the tsbx binary
+  strings, or the WorkBuddy-side analysis.
+
+- **`FlapPearLabs/workbuddy-safedelete-rootcause`** (this repo)
+  is the **canonical repro + root cause + vendor report**. It
+  contains:
+  - the one-click repro bundle (`bin/repro-all.ps1`)
+  - the sanitized evidence pack (`report/sanitized-evidence.md`)
+  - the natural incident F1 record (`report/NATURAL-INCIDENT-F1.md`)
+  - the next-step native procedure (`report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`)
+  - the Tencent submission file (`report/BUG-REPORT-TENCENT.md`)
+  - the closure summary (this file)
+
+### Final vendor filing: TWO LINKED BUGS
+
+The two issues have different root-cause layers even though they
+share the same product-level philosophy (deny-by-default +
+threshold=20 default). They are recommended to be filed as **two
+linked bugs** so that the WorkBuddy `safe-delete` and `sandbox`
+owners can each be assigned the right issue:
+
+- **BUG A — `npm ci` / Node safe-delete bulk guard**
+  - **CONFIRMED** in this repo's disposable lab (1 click, 11 per-step
+    records, partial-mutation smoking gun in `NPM_CI_PHASE2_SHIM_TRASH_EVENT`).
+  - **Component-level cause:** `genie-safe-delete.cjs` +
+    `safe-delete-bulk-guard.cjs` (verified by source line numbers
+    and SHA256).
+  - **Owner:** WorkBuddy `safe-delete` team.
+
+- **BUG B — `git switch` / `git merge` / native WorkBuddy sandbox**
+  - **PENDING_NATIVE_WORKBUDDY_EXECUTION** for component-level
+    confirmation; **HIGH_CONFIDENCE_INFERENCE** for the
+    sandbox-policy cause based on the F1 natural recurrence
+    (3-path merge delta + 18 missing files) and 5+ user-side
+    audit log events.
+  - **Candidate component-level cause:** the `tsbx.dll` kernel
+    filter applied to all file operations of processes spawned
+    by `sandbox-cli.exe` inside a real WorkBuddy session.
+    Not yet directly observed from a lab probe.
+  - **Owner:** WorkBuddy `sandbox` team.
+
+An umbrella bug that links both is acceptable if Tencent prefers
+a single routing ID, but the two issues should be tracked as
+distinct sub-issues so each owner can address their own layer.
+The closure of BUG B requires the native WorkBuddy Phase 1 / 2A /
+2B / 2C procedure in `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md` to
+be executed from inside a real WorkBuddy tool-call.
+
 ## Files in this repro bundle
 
 | File | Purpose |
@@ -278,6 +338,7 @@ commits forward.
 | `report/BUG-REPORT-TENCENT.md` | Submission-ready bug report (5-min read, 30-sec Issue A repro) |
 | `report/ROOT_CAUSE_CLOSURE_REPORT.md` | This file |
 | `report/sanitized-evidence.md` | Full evidence pack with code snippets, shim report, audit log quotes |
+| `report/NATURAL-INCIDENT-F1.md` | Sanitized record of the 2026-08-14 F1 natural recurrence (3-path merge delta, 18 missing test files, sanitized WorkBuddy environment facts) |
 | `report/results-latest.txt` | Full orchestrator output (last lab run) |
 | `report/results-npm-ci.txt` | npm ci A/B structured records |
 | `report/results-git-normal.txt` | Git A/B NORMAL mode records |
