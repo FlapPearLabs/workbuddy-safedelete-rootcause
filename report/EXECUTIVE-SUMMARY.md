@@ -90,7 +90,7 @@ recovers every missing file non-destructively.
 | Mavis lab NORMAL control | 11/11 `WORKTREE_CHECK_VERDICT=CLEAN` | NEGATIVE CONTROL — normal git does not lose files |
 | Mavis lab SHIM-ONLY control | 11/11 `WORKTREE_CHECK_VERDICT=CLEAN` | NEGATIVE CONTROL — **Node shim alone does NOT cause Bug B** (FALSIFIED) |
 | **WorkBuddy-native R1** (2026-08-14) | **reproduced** `WORKTREE_ONLY_LOSS`, 59 unrelated tracked files, HEAD/index intact, fsck healthy, under real `sandbox-cli.exe` ancestry | **SYNTHETIC_NATIVE_REPRODUCTION = CONFIRMED** |
-| R1 evidence-localization repair | loss localized to the build's final `git checkout master` | narrowed CLEAN→NON_CLEAN interval |
+| R1 evidence-localization repair | R1 observed the non-clean worktree at the post-final-checkout checkpoint but lacked a physical pre-final-checkout checkpoint, so the exact causal operation was **not** localized (prior CASE A "localized to final `git checkout master`" claim retracted) | CLEAN→NON_CLEAN interval NOT narrowed by R1 |
 | **WorkBuddy-native R2** (2026-08-15, four-checkpoint harness) | A CLEAN · B CLEAN · C CLEAN · D CLEAN — loss **NOT** reproduced in this one controlled run | **INTERMITTENT_ACROSS_OBSERVED_NATIVE_RUNS = YES** |
 
 ### What this means for the cause
@@ -99,8 +99,8 @@ recovers every missing file non-destructively.
 - `WORKBUDDY_RUNTIME_ASSOCIATION = VERY_HIGH` (loss occurs only inside the WorkBuddy-native
   execution chain; never observed from a non-WorkBuddy shell)
 - `GIT_COMPONENT_CAUSE = UNRESOLVED` (no direct component-level evidence)
-- `TSBX_FILTER_CAUSE = HIGH_CONFIDENCE_HYPOTHESIS` (the `tsbx.dll` kernel filter is the only
-  remaining mechanism consistent with all observed facts, but it has **not** been directly
+- `TSBX_FILTER_CAUSE = HIGH_CONFIDENCE_HYPOTHESIS` (the `tsbx.dll` kernel filter is the leading
+  candidate mechanism consistent with all observed facts, but it has **not** been directly
   observed denying a specific operation)
 
 **Do NOT write** "race confirmed", "timing bug confirmed", or "filter-driver race confirmed".

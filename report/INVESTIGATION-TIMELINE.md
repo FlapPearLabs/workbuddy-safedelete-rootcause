@@ -72,27 +72,27 @@ vendor-report repository (separate from the production repo).
 ## Stage 13 — Native WorkBuddy context validation (R1, 2026-08-14)
 `assert-native-workbuddy-context.ps1` proved the probe ran under real `sandbox-cli.exe`
 ancestry (R1 session id absent → UNKNOWN, but ancestry confirmed; R2 later got YES).
-→ `work/native-runs/2026-08-14T21-43-52Z-8d51e361d168/context-assert.txt`
+→ `report/NATIVE-R1-EVIDENCE.md` (context assertion; RAW_LOCAL_SOURCE: `work/native-runs/2026-08-14T21-43-52Z-8d51e361d168/context-assert.txt` — NOT AVAILABLE IN PUBLIC REPO)
 
 ## Stage 14 — Native synthetic R1: 59-file WORKTREE_ONLY_LOSS (2026-08-14)
 WorkBuddy-native PROBE_B (F1-shape) **reproduced** `WORKTREE_ONLY_LOSS`: 59 unrelated
 tracked files physically absent, HEAD/index intact, HEAD_TREE==INDEX_TREE, fsck healthy.
 Persisted across checkout-back (not self-healing).
-→ `work/native-runs/2026-08-14T21-43-52Z-8d51e361d168/PHASE1_FINAL_REPORT.md`
+→ `report/NATIVE-R1-EVIDENCE.md` (RAW_LOCAL_SOURCE: `work/native-runs/2026-08-14T21-43-52Z-8d51e361d168/PHASE1_FINAL_REPORT.md` — NOT AVAILABLE IN PUBLIC REPO)
 → `report/BUG-B-GIT-WORKTREE-LOSS.md` (SYNTHETIC R1)
 
 ## Stage 15 — Evidence-localization repair (R1-repair, 2026-08-14)
 Harness repair closed two gaps (pre-first-checkout baseline; runner always finalizes).
-Rerun (CASE A) localized the loss to the build's **final `git checkout master`**.
+Rerun (CASE A) observed the non-clean worktree at the post-final-checkout checkpoint but lacked a physical pre-final-checkout checkpoint, so the exact causal operation was **not** localized. The prior "localized to the build's final `git checkout master`" characterization is retracted.
 `GIT_COMPONENT_CAUSE=UNRESOLVED`, `TSBX_FILTER_CAUSE=HIGH_CONFIDENCE_HYPOTHESIS`.
 Committed as `b28ca20…` on `fix/phase1-evidence-localization`.
-→ `work/native-runs/2026-08-14T15-32-33Z-jf10pgjgdoiu/REPAIR_FINAL_REPORT.md`
+→ `report/NATIVE-R1-EVIDENCE.md` (retraction note; RAW_LOCAL_SOURCE: `work/native-runs/2026-08-14T15-32-33Z-jf10pgjgdoiu/REPAIR_FINAL_REPORT.md` — NOT AVAILABLE IN PUBLIC REPO)
 
 ## Stage 16 — R2 four-checkpoint harness (2026-08-15)
 `build-git-probe-f1-shape.ps1` gained four physical checkpoints (A/B/C/D) to pinpoint the
 CLEAN→NON_CLEAN interval. Parser/attribution tests fixed (removed `mavis-trash` dependency).
 Committed as `4243b04…` (independent-review PASS).
-→ `work/native-runs/2026-08-15T06-51-51Z-c7de59f17452/REPAIR_R2_FINAL_REPORT.md`
+→ `report/NATIVE-R2-EVIDENCE.md` (RAW_LOCAL_SOURCE: `work/native-runs/2026-08-15T06-51-51Z-c7de59f17452/REPAIR_R2_FINAL_REPORT.md` — NOT AVAILABLE IN PUBLIC REPO)
 
 ## Stage 17 — R2: A/B/C/D CLEAN, one-shot non-reproduction (2026-08-15)
 Controlled R2 rerun: CHECKPOINT A/B/C/D all CLEAN, loss **NOT** reproduced. Combined with

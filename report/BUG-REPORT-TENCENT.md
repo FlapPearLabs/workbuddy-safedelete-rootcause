@@ -145,7 +145,7 @@ The complete, copy-pasteable procedure for running the Git probe from inside a r
 | WORKBUDDY FULL (kernel filter active) | **PENDING_NATIVE_WORKBUDDY_EXECUTION** (Phase 1 in `NEXT-WORKBUDDY-GIT-EXPERIMENT.md`) |
 | WORKBUDDY FULL + `inherit_user` allow-rule | **PENDING_NATIVE_WORKBUDDY_EXECUTION** (Phase 2A/2B in `NEXT-WORKBUDDY-GIT-EXPERIMENT.md`) |
 
-The lab probe rules out the Node shim as the cause. The remaining candidate is the kernel filter. The kernel filter is the only mechanism consistent with all observed facts:
+The lab probe rules out the Node shim as the cause. The leading candidate (HIGH_CONFIDENCE_HYPOTHESIS) is the kernel filter. The kernel filter is a consistent candidate mechanism (not established as the cause):
 
 - `tsbx.dll` is currently loaded by `sandbox-cli.exe` (PID observed during investigation).
 - `tsbx_rules.json` has `default_action: "deny_write"` + `recyclebin_backup: true` + no allow-rule for `<WORKSPACE>\**`.

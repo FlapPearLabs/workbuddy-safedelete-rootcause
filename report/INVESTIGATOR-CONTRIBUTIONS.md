@@ -53,8 +53,7 @@ sandbox execution chain**, where the kernel filter is active.
 - **Process ancestry evidence** — confirmed git runs under the WorkBuddy-native chain.
 - **Synthetic 59-file native reproduction (R1)** — `WORKTREE_ONLY_LOSS` reproduced with
   HEAD/index intact, fsck healthy, persisted across checkout-back.
-- **R1 evidence** — `PHASE1_FINAL_REPORT.md`; localized the loss to the build's final
-  `git checkout master` (R1-repair CASE A).
+- **R1 evidence** — `PHASE1_FINAL_REPORT.md` (R1 reproduced the 59-file worktree-only loss; see `report/NATIVE-R1-EVIDENCE.md`). The prior R1-repair CASE A claim of "localized the loss to the build's final `git checkout master`" is **retracted**: R1 first observed the non-clean worktree at the post-final-checkout checkpoint but lacked a physical pre-final-checkout checkpoint, so the exact causal operation was not localized.
 - **R2 localization harness** — four physical checkpoints (A/B/C/D) inserted into the build
   to pinpoint the CLEAN→NON_CLEAN interval; parser/attribution tests de-`mavis-trash`-ed.
 - **R2 controlled clean run** — A/B/C/D all CLEAN; loss NOT reproduced in that one run,

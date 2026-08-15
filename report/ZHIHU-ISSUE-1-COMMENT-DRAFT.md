@@ -52,3 +52,8 @@ Canonical investigation repository:
 - Keep the canonical URL exactly as shown; it is the single source of truth.
 - The draft explicitly states the Bug B component cause is **unresolved** —
   do not upgrade that wording when posting.
+- The prior R1-repair claim of "localized to the build's final `git checkout
+  master`" is **retracted** — do not repeat it. The correct statement is that
+  R1 observed the non-clean worktree at the post-final-checkout checkpoint but
+  lacked a physical pre-final-checkpoint, so the exact causal operation was not
+  localized.

@@ -13,7 +13,7 @@ observed in a Windows dev environment running WorkBuddy (Tencent) 5.3.11:
   `git merge` while HEAD / index / blob remain intact. The Mavis lab probe
   conclusively rules out the Node shim as the cause (11/11 per-step
   `WORKTREE_CHECK_VERDICT=CLEAN` in both NORMAL and SHIM-ONLY modes with
-  a real branch delta). The remaining candidate is the `tsbx.dll` kernel
+  a real branch delta). The leading candidate (HIGH_CONFIDENCE_HYPOTHESIS) is the `tsbx.dll` kernel
   filter, which is only loaded into processes spawned by `sandbox-cli.exe`
   inside a real WorkBuddy session. **A native WorkBuddy run (R1) reproduced
   the worktree-only loss (59 unrelated tracked files)**; a follow-up
@@ -166,8 +166,8 @@ Git identity. This is the user's public commit author, not a credential.
 ## Recommended bug report structure
 
 We recommend filing as **two linked bugs** because the two issues have
-**different root-cause layers** even though they share the same
-product-level philosophy (deny-by-default + 20-default threshold):
+**different root-cause layers** even though both sit within WorkBuddy's
+safe-delete / sandbox stack:
 
 - **Bug A** — `safe-delete` Node shim + bulk-guard (owner: WorkBuddy
   `safe-delete` team). Concrete, repro'd in the lab, has a 30-second
@@ -206,10 +206,8 @@ sub-issues so each owner can address their own layer.
 | Shell shim (`safe-bin/{rm,rmdir,unlink}`) | `rm` / `rmdir` / `unlink` in shell sessions | All bash / sh processes spawned by WorkBuddy | NOT TESTED |
 | Kernel filter (`tsbx.dll` + `tsbx_rules.json`) | All file system operations at the IRP level for any process whose handle is associated with the filter | All processes spawned by WorkBuddy (git.exe, node.exe, npm.cmd, etc.) | NOT REPRODUCED in Mavis; **HIGH_CONFIDENCE_INFERENCE for Issue B** |
 
-Issue A only needs the Node shim to manifest. Issue B requires the kernel
-filter. The two issues share the same product-level root cause
-(WorkBuddy's deny-by-default + threshold=20 default) but live in different
-layers of the safe-delete / sandbox stack.
+Issue A only needs the Node shim to manifest. Issue B is associated with the kernel
+filter (HIGH_CONFIDENCE_HYPOTHESIS — not established as the cause). The two issues must not be conflated: Issue A is component-confirmed (Node shim + 20-delete bulk-guard); Issue B's kernel-filter cause is a HIGH_CONFIDENCE_HYPOTHESIS with an unresolved component cause, and the 20-delete threshold does not apply to it.
 
 ## Safety
 

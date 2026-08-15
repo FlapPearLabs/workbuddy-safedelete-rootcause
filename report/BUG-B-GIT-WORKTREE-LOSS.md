@@ -110,11 +110,14 @@ These are optional next steps for the vendor, marked **FUTURE_DIAGNOSTIC_IF_VEND
 2. **ETW / ProcMon** capture of kernel-filter denials during a reproducing native run.
 
 ## STATUS
-`REAL_WORLD_INCIDENTS = CONFIRMED · SYNTHETIC_NATIVE_REPRODUCTION = CONFIRMED ·
-COMPONENT_CAUSE = UNRESOLVED`
+`PHENOMENON_CONFIRMED = YES · REAL_WORLD_INCIDENTS = CONFIRMED ·
+SYNTHETIC_NATIVE_REPRODUCTION = CONFIRMED ·
+PRODUCT_CAUSE = UNRESOLVED · COMPONENT_CAUSE = UNRESOLVED`
 
 ## ATTACHMENTS
-**Committed in this repo (public):**
+**Committed in this repo (public evidence):**
+- `report/NATIVE-R1-EVIDENCE.md` — sanitized public derivative of the R1 native run (WORKTREE_ONLY_LOSS reproduced, 59 files, HEAD/index intact)
+- `report/NATIVE-R2-EVIDENCE.md` — sanitized public derivative of the R2 four-checkpoint run (A/B/C/D CLEAN, loss not reproduced in that one run)
 - `bin/build-git-probe-f1-shape.ps1`, `bin/run-git-cycles.ps1`, `bin/check-worktree.ps1`,
   `bin/assert-native-workbuddy-context.ps1` (native harness — runnable, sanitized)
 - `report/NATURAL-INCIDENT-F1.md` (F1 real incident)
@@ -122,11 +125,12 @@ COMPONENT_CAUSE = UNRESOLVED`
 - `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md` (future diagnostic procedure)
 - `report/MASTER-INVESTIGATION-LEDGER.md`, `report/EVIDENCE-INDEX.md` (reconciliation + claims)
 
-**Local-only (NOT committed — gitignored under `work/`, see `work/RAW-EVIDENCE-MANIFEST.md`):**
-- `work/native-runs/2026-08-14T21-43-52Z-8d51e361d168/PHASE1_FINAL_REPORT.md` (R1 repro log)
-- `work/native-runs/2026-08-14T15-32-33Z-jf10pgjgdoiu/REPAIR_FINAL_REPORT.md` (R1 localization log)
-- `work/native-runs/2026-08-15T06-51-51Z-c7de59f17452/REPAIR_R2_FINAL_REPORT.md` (R2 clean-run log)
+**Raw local evidence (NOT AVAILABLE IN PUBLIC REPO — gitignored under `work/`, see `work/RAW-EVIDENCE-MANIFEST.md`):**
+- `work/native-runs/2026-08-14T21-43-52Z-8d51e361d168/PHASE1_FINAL_REPORT.md` (R1 repro log) — `RAW_LOCAL_SOURCE` for `report/NATIVE-R1-EVIDENCE.md`
+- `work/native-runs/2026-08-14T15-32-33Z-jf10pgjgdoiu/REPAIR_FINAL_REPORT.md` (R1 evidence-localization repair log — its "localized to final `git checkout master`" claim is retracted) — `RAW_LOCAL_SOURCE`
+- `work/native-runs/2026-08-15T06-51-51Z-c7de59f17452/REPAIR_R2_FINAL_REPORT.md` (R2 clean-run log) — `RAW_LOCAL_SOURCE` for `report/NATIVE-R2-EVIDENCE.md`
 
-These local logs are the raw, non-sanitized native-run evidence. They are mapped
-to the sanitized public claims via `work/RAW-EVIDENCE-MANIFEST.md` for future
-re-verification without exposing raw data.
+These raw logs are **not part of the public repository**. The sanitized public
+derivatives (`report/NATIVE-R1-EVIDENCE.md`, `report/NATIVE-R2-EVIDENCE.md`) carry
+the canonical evidence and are mapped to the raw logs via `work/RAW-EVIDENCE-MANIFEST.md`
+for future re-verification without exposing raw data.

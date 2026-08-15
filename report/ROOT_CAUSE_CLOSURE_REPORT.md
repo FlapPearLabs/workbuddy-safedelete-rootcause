@@ -23,7 +23,7 @@ WorkBuddy-native R1/R2 reproduction added 2026-08-14 → 2026-08-15
 | Bug | Product cause | Component cause | Status |
 |---|---|---|---|
 | **Bug A — npm ci safe-delete** | CONFIRMED | CONFIRMED (`genie-safe-delete.cjs` + `safe-delete-bulk-guard.cjs`) | Closed at component level |
-| **Bug B — Git worktree loss** | CONFIRMED (phenomenon) | **UNRESOLVED** | Phenomenon confirmed; component open |
+| **Bug B — Git worktree loss** | UNRESOLVED | **UNRESOLVED** | PHENOMENON_CONFIRMED = YES; component open |
 
 Do **not** call Bug B fully root-cause-confirmed. Do **not** state that R1/R2
 proves a race. The correct phrasing: *"The anomaly is intermittent across the
@@ -122,9 +122,10 @@ user-side audit log independently confirms the same error class.
 **The lab probe conclusively rules out the Node shim as the cause of Issue B**
 (FALSIFIED by the SHIM-ONLY control). The shim is a per-Node-process patch; it
 does not touch `git.exe`. A native WorkBuddy run reproduced the loss, so the
-cause is specific to the WorkBuddy-native execution chain; the only remaining
-mechanism consistent with all observed facts is the `tsbx.dll` kernel filter,
-but it has **not** been directly observed denying a specific operation.
+loss is specifically associated with the WorkBuddy-native execution chain; the
+leading candidate mechanism consistent with all observed facts is the `tsbx.dll`
+kernel filter (HIGH_CONFIDENCE_HYPOTHESIS), but it has **not** been directly
+observed denying a specific operation.
 
 ### B.2 Product-level cause
 
@@ -140,7 +141,7 @@ no view of the kernel filter's denials (no log, no error), the loss
 appears to come from nowhere.
 
 This is the **HIGH_CONFIDENCE_HYPOTHESIS** for the product-level cause. It is
-the only mechanism consistent with all observed facts after Defender / SSD /
+the leading candidate mechanism consistent with all observed facts after Defender / SSD /
 NTFS / Defender-quarantine were ruled out, and after the Node shim was
 falsified by the SHIM-ONLY control. It has **not** been directly observed
 denying a specific operation.
@@ -167,7 +168,7 @@ denying a specific operation.
   **UNRESOLVED** — no direct component-level evidence; native R1 reproduced but
   R2 one-shot was clean, so the source of run-to-run variability is open.
 - `TSBX_FILTER_CAUSE`: **HIGH_CONFIDENCE_HYPOTHESIS** — the `tsbx.dll` kernel
-  filter is the only remaining mechanism consistent with all observed facts,
+  filter is the leading candidate mechanism consistent with all observed facts,
   but it has not been directly observed denying a specific operation.
 - `SOURCE_OF_RUN_TO_RUN_VARIABILITY`: **UNRESOLVED**.
 
@@ -191,10 +192,13 @@ operations:
 | **Shell shim** (`safe-bin/{rm,rmdir,unlink}`) | `rm` / `rmdir` / `unlink` in shell sessions via `PATH` override | All bash / sh processes spawned by WorkBuddy | NOT TESTED (out of scope for this round) |
 | **Kernel filter** (`tsbx.dll` + `tsbx_rules.json`) | All file system operations at the IRP level for any process whose handle is associated with the filter | All processes spawned by WorkBuddy (git.exe, node.exe, npm.cmd, etc.) | **NATIVE R1 REPRODUCED** the worktree loss; R2 one-shot clean → intermittent; `GIT_COMPONENT_CAUSE=UNRESOLVED`, `TSBX_FILTER_CAUSE=HIGH_CONFIDENCE_HYPOTHESIS` for Issue B |
 
-The Node shim alone is sufficient to cause Issue A. The kernel filter is
-required (and inferred to be sufficient) to cause Issue B. The two issues
-have **different root-cause layers** even though they share the same
-product-level philosophy (deny-by-default + 20-default threshold).
+The Node shim alone is sufficient to cause Issue A (component-confirmed).
+For Issue B, the `tsbx.dll` kernel filter is a **HIGH_CONFIDENCE_HYPOTHESIS**
+(leading candidate), **not** an established cause: it has not been directly
+observed denying a specific git operation, and the source of run-to-run
+variability (R1 reproduced, R2 clean) is unresolved. The two issues have
+**different root-cause layers** and must not be conflated — the 20-delete
+bulk-guard threshold that governs Issue A does **not** apply to Issue B.
 
 ---
 

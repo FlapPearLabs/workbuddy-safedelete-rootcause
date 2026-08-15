@@ -49,6 +49,8 @@ COMPONENT_CAUSE=CONFIRMED`. Owner: WorkBuddy `safe-delete` team.
 | Real-world incident record (F1) | `report/NATURAL-INCIDENT-F1.md` | READY |
 | Native R1 synthetic reproduction (summary) | `report/BUG-B-GIT-WORKTREE-LOSS.md` §SYNTHETIC R1 | READY |
 | Native R2 four-checkpoint run (summary) | `report/BUG-B-GIT-WORKTREE-LOSS.md` §R2 | READY |
+| Native R1 sanitized evidence (public) | `report/NATIVE-R1-EVIDENCE.md` | READY |
+| Native R2 sanitized evidence (public) | `report/NATIVE-R2-EVIDENCE.md` | READY |
 | Root-cause closure classification | `report/ROOT_CAUSE_CLOSURE_REPORT.md` §ISSUE B | READY |
 | Native harness (runnable, sanitized) | `bin/build-git-probe-f1-shape.ps1`, `bin/run-git-cycles.ps1`, `bin/check-worktree.ps1`, `bin/assert-native-workbuddy-context.ps1` | READY (committed) |
 | Negative controls (NORMAL / SHIM-ONLY) | `report/results-git-normal.txt`, `report/results-git-shim-only.txt` | READY (committed) |
@@ -61,9 +63,10 @@ SYNTHETIC_NATIVE_REPRODUCTION=CONFIRMED · COMPONENT_CAUSE=UNRESOLVED`.
 Owner: WorkBuddy `sandbox` team. Do **not** state "race confirmed" or
 "component confirmed".
 
-> Raw native-run logs (`work/native-runs/**`) are **local-only** (gitignored)
-> and are mapped to the sanitized public claims via `work/RAW-EVIDENCE-MANIFEST.md`.
-> They are intentionally NOT part of the submission package.
+> Raw native-run logs (`work/native-runs/**`) are **local-only** (gitignored,
+> **NOT AVAILABLE IN PUBLIC REPO**) and are surfaced as sanitized public derivatives
+> `report/NATIVE-R1-EVIDENCE.md` (R1) and `report/NATIVE-R2-EVIDENCE.md` (R2). The raw
+> logs themselves are intentionally NOT part of the submission package.
 
 ---
 

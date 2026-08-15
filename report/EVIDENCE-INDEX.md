@@ -59,8 +59,9 @@ intact (WORKTREE_ONLY_LOSS).
 
 - STATUS = CONFIRMED
 - CONFIDENCE = CONFIRMED
-- PRIMARY_EVIDENCE = `work/native-runs/2026-08-14T21-43-52Z-8d51e361d168/PHASE1_FINAL_REPORT.md`
+- PRIMARY_EVIDENCE = `report/NATIVE-R1-EVIDENCE.md`
   (R1: 59 files, HEAD_INDEX_TREE_MATCH=YES, FSCK_HEALTHY=YES)
+- RAW_LOCAL_SOURCE = `work/native-runs/2026-08-14T21-43-52Z-8d51e361d168/PHASE1_FINAL_REPORT.md` — **NOT AVAILABLE IN PUBLIC REPO**
 - SECONDARY_EVIDENCE = `report/NATURAL-INCIDENT-F1.md` (F1: 18 files); `report/sanitized-evidence.md §F` (5+ user events)
 - REPRO_METHOD = `bin/build-git-probe-f1-shape.ps1` + `bin/run-git-cycles.ps1`, run **inside** a WorkBuddy tool-call
 - NEGATIVE CONTROLS = NORMAL 11/11 CLEAN; SHIM-ONLY 11/11 CLEAN
@@ -84,8 +85,9 @@ Bug B.
 
 - STATUS = NOT_PROVEN
 - CONFIDENCE = HIGH_CONFIDENCE_HYPOTHESIS
-- PRIMARY_EVIDENCE = `report/ROOT_CAUSE_CLOSURE_REPORT.md §B`; `REPAIR_R2_FINAL_REPORT.md`
+- PRIMARY_EVIDENCE = `report/ROOT_CAUSE_CLOSURE_REPORT.md §B`; `report/NATIVE-R2-EVIDENCE.md`
   (`TSBX_FILTER_CAUSE=HIGH_CONFIDENCE_HYPOTHESIS`)
+- RAW_LOCAL_SOURCE = `work/native-runs/2026-08-15T06-51-51Z-c7de59f17452/REPAIR_R2_FINAL_REPORT.md` — **NOT AVAILABLE IN PUBLIC REPO**
 - SECONDARY_EVIDENCE = `tsbx_rules.json` deny_write default + no `<WORKSPACE>\**` allow;
   native ancestry confirmed; never reproduced outside WorkBuddy
 - REPRO_METHOD = inference from policy + negative controls (no direct denial capture)
@@ -97,8 +99,9 @@ Bug B is **intermittent** across observed native runs (R1 reproduced, R2 clean).
 
 - STATUS = CONFIRMED (intermittency observed)
 - CONFIDENCE = CONFIRMED
-- PRIMARY_EVIDENCE = R1 `PHASE1_FINAL_REPORT.md` vs R2 `REPAIR_R2_FINAL_REPORT.md`
+- PRIMARY_EVIDENCE = R1 `report/NATIVE-R1-EVIDENCE.md` vs R2 `report/NATIVE-R2-EVIDENCE.md`
   (`NATIVE_RERUN_NOT_REPRODUCED_IN_ONE_RUN=YES`)
+- RAW_LOCAL_SOURCE = R1 `work/native-runs/2026-08-14T21-43-52Z-8d51e361d168/PHASE1_FINAL_REPORT.md` and R2 `work/native-runs/2026-08-15T06-51-51Z-c7de59f17452/REPAIR_R2_FINAL_REPORT.md` — **NOT AVAILABLE IN PUBLIC REPO**
 - SECONDARY_EVIDENCE = user-side recurrence is also sporadic (5+ events over 4 days)
 - REPRO_METHOD = two independent native runs
 - NEGATIVE CONTROLS = R2 clean run
@@ -107,7 +110,7 @@ Bug B is **intermittent** across observed native runs (R1 reproduced, R2 clean).
 ### CLAIM GIT-05
 The WorkBuddy runtime is associated with the loss.
 
-- STATUS = PROVEN (association)
+- STATUS = OBSERVED_ASSOCIATION = STRONG
 - CONFIDENCE = VERY_HIGH
 - PRIMARY_EVIDENCE = `REPAIR_R2_FINAL_REPORT.md` (`WORKBUDDY_RUNTIME_ASSOCIATION=VERY_HIGH`);
   native ancestry to `sandbox-cli.exe`/`WorkBuddy.exe`

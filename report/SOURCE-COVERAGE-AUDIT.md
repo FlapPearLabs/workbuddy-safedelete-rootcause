@@ -34,11 +34,20 @@ Columns: `SOURCE · PATH · TYPE · DATE/ORDER · TOPIC · RELEVANCE · SENSITIV
 
 | SOURCE | PATH | TYPE | DATE/ORDER | TOPIC | RELEVANCE | SENSITIVE | PUBLICATION_ACTION |
 |---|---|---|---|---|---|---|---|
-| B | *(entire directory)* | — | — | — | — | — | **DOES NOT EXIST** |
+| B | *(entire directory)* | — | — | — | — | — | **UNAVAILABLE — NOT VERIFIABLE** |
 
-> Verified via targeted `find` across `<USER_PROFILE>` (depth 9, case-insensitive) for `*c19aa4*`:
-> **zero matches**. The directory named in the task is absent on this machine. No files from
-> SOURCE B were reviewed because none are present. This is recorded, not silently skipped.
+> **Verification (re-run this task):** literal-path PowerShell `Test-Path` / `Resolve-Path`
+> on `<USER_PROFILE>\.mavis\agents\mavis\workspace` returned
+> `SOURCE_B_TEST_PATH_EXISTS = False`. The workspace (`<USER_PROFILE>\.mavis` is a symlink →
+> `.minimax`) contains only: `.mavis`, `.opencode`, `avatars`, `story-image-studio`, `tts`,
+> `voice-audition`, `workbuddy-tutorial` — `mvs_c19aa4fdfe7249e4b2c51571cef94437` is **absent**.
+>
+> **Status fields:** `SOURCE_B_STATUS = UNAVAILABLE`; `SOURCE_B_COVERAGE = NOT_VERIFIABLE`;
+> `AVAILABLE_SOURCE_UNCOVERED_HIGH_VALUE_FINDINGS = 0`.
+>
+> **KNOWN_SOURCE_GAP:** SOURCE B is unavailable on the current machine; no claim is made that
+> its (absent) contents were audited. Do **not** state that all four sources were fully audited —
+> SOURCE B was not verifiable. This is recorded, not silently skipped.
 
 ### SOURCE C — canonical repo `workbuddy-safedelete-rootcause` (this document set)
 
@@ -104,11 +113,13 @@ first time via this consolidation.
 
 ## 3. Completeness enforcement
 
-`UNCOVERED_HIGH_VALUE_FINDINGS = 0`
+`UNCOVERED_HIGH_VALUE_FINDINGS = 0` (for the sources that were verifiable)
 
-All material Mavis investigation artifacts are represented in the canonical repo. The two
-Mavis on-disk context blobs (SOURCE A) and the absent SOURCE B directory contain no durable
-investigation findings requiring publication; they are correctly excluded as runtime state /
-non-existent.
+All material Mavis investigation artifacts that ARE available are represented in the canonical
+repo. The two Mavis on-disk context blobs (SOURCE A) are correctly excluded as runtime state.
+SOURCE B is **UNAVAILABLE / NOT_VERIFIABLE** (see §1) — its (absent) contents were **not**
+audited, and no finding is attributed to it; `AVAILABLE_SOURCE_UNCOVERED_HIGH_VALUE_FINDINGS = 0`.
+The four-source "fully audited" claim is explicitly **not** made, because SOURCE B could not be
+verified on this machine.
 
 Nothing is declared "complete" without this reconciliation.

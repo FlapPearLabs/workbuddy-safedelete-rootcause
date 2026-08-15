@@ -97,8 +97,8 @@ Key distinctions proven during the investigation:
    (FALSIFIED as the cause of Bug B via the SHIM-ONLY control, GIT-002).
 2. **Kernel filter** (`tsbx.dll`) attaches to **all** file operations of every
    child process spawned through `sandbox-cli.exe`, at the IRP level. It is the
-   only mechanism that can affect `git.exe` worktree operations (Bug B
-   candidate, GIT-007).
+   leading candidate mechanism that can affect `git.exe` worktree operations (Bug B
+   candidate, GIT-007; HIGH_CONFIDENCE_HYPOTHESIS).
 3. **Native ancestry** is verifiable: `assert-native-workbuddy-context.ps1`
    confirms the process tree reaches `sandbox-cli.exe` (R1) or `WorkBuddy.exe`
    with a present `CODEBUDDY_SESSION_ID` (R2). Non-WorkBuddy shells do not load
