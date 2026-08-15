@@ -57,3 +57,34 @@ This task is a **publication-package correction only**. It did NOT:
   publication-review gate)
 - force-push or rewrite git history
 - delete or alter any prior evidence
+
+---
+
+## LAST_MILE_FIX commit authored via `commit-tree` + loose-ref (no sandbox escape)
+
+`WORKBUDDY_VENDOR_PUBLICATION_LAST_MILE_FIX` (this task) committed its
+mechanical corrections to `docs/vendor-handoff-final` as commit
+`a6f188892c030200b28233bf63f2471c705ac994` (parent `406d217…`, pushed to
+`a6f1888`).
+
+**Authoring method:** a normal `git commit` was *not* used. To sidestep the
+documented bundled-PortableGit multi-level-ref silent-failure mode (command
+exits 0 but the ref file is never created, so `git rev-parse HEAD` later
+reports `ambiguous argument 'HEAD'`), the commit was built directly:
+
+```
+TREE=$(git write-tree)
+COMMIT=$(git commit-tree "$TREE" -p <parent> -m "...")
+mkdir -p .git/refs/heads/docs .git/refs/remotes/origin
+printf '%s\n' "$COMMIT" > .git/refs/heads/docs/vendor-handoff-final
+```
+
+**Sandbox state:** this was done with **normal sandbox permissions** — no
+`dangerouslyDisableSandbox` was used. The loose-ref write bypasses git's own
+failing ref-write path without escaping the sandbox, so the forensic
+conclusions are unaffected.
+
+**Forensic impact: NONE.** This is pure repository plumbing for the publication
+branch; it does not alter, re-run, or influence any WorkBuddy sandbox behavior,
+native reproduction, or raw evidence. The native-run logs remain byte-identical
+and fingerprinted in `NATIVE-R1-EVIDENCE.md` / `NATIVE-R2-EVIDENCE.md`.
