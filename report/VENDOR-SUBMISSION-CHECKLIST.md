@@ -53,9 +53,11 @@ COMPONENT_CAUSE=CONFIRMED`. Owner: WorkBuddy `safe-delete` team.
 | Native R1 sanitized evidence (public) | `report/NATIVE-R1-EVIDENCE.md` | READY |
 | Native R2 sanitized evidence (public) | `report/NATIVE-R2-EVIDENCE.md` | READY |
 | Root-cause closure classification | `report/ROOT_CAUSE_CLOSURE_REPORT.md` §ISSUE B | READY |
-| Native harness (runnable, sanitized) | `bin/build-git-probe-f1-shape.ps1`, `bin/run-git-cycles.ps1`, `bin/check-worktree.ps1`, `bin/assert-native-workbuddy-context.ps1` | READY (committed) |
-| Negative controls (NORMAL / SHIM-ONLY) | `report/results-git-normal.txt`, `report/results-git-shim-only.txt` | READY (committed) |
-| Future diagnostic procedure | `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md` | READY |
+| **Authoritative native harness (F1-shape, runnable, sanitized)** | `bin/build-git-probe-f1-shape.ps1` (PRIMARY — 160 tracked / 60 test-like / 3-path FF delta / checkpoints A/B/C/D), `bin/run-git-cycles.ps1`, `bin/check-worktree.ps1`, `bin/classify-run.ps1`, `bin/assert-native-workbuddy-context.ps1` | READY (committed) |
+| Auxiliary stress probe (NOT the reproduction shape) | `bin/build-git-probe.ps1` (60 files / 46M/5D/16A/4R — HISTORICAL / AUXILIARY; used as the Bug A Git negative-control fixture) | READY (committed) |
+| Negative controls (NORMAL / SHIM-ONLY) | `report/results-git-normal.txt`, `report/results-git-shim-only.txt` (HISTORICAL EVIDENCE, legacy schema) | READY (committed) |
+| Result classifier (deterministic) | `bin/classify-run.ps1` + `bin/test-classify-run.ps1` (distinguishes CLEAN / WORKTREE_ONLY_LOSS / WORKTREE_CONTENT_DIVERGENCE / PREEXISTING_NON_CLEAN / GIT_OPERATION_INTERFERENCE / INSTRUMENTATION_ERROR / CHECKER_ERROR / NONZERO_GIT_EXIT / TARGET_NOT_REACHED) | READY (committed) |
+| Future diagnostic procedure | `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md` (F1-shape primary flow) | READY |
 | zhihu-grabber-toolkit reference | Issue #1 (comment draft prepared, NOT posted) | READY |
 | GitHub repository | `FlapPearLabs/workbuddy-safedelete-rootcause` | PUBLIC |
 

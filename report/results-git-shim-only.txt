@@ -1,4 +1,8 @@
-﻿
+﻿# HISTORICAL EVIDENCE — Git A/B SHIM-ONLY-mode records from the pre-repair
+# lab run. Produced by the LEGACY harness (see results-git-normal.txt header
+# for the schema note). Core claim — 11/11 WORKTREE_CHECK_VERDICT=CLEAN —
+# remains valid. Kept as-is; do not re-generate with the current harness.
+
 GIT_CYCLES_START repo=<WORKSPACE>\fixtures\git-probe-shim cycles=5 merge=True
 GIT_CYCLE_BASELINE_REPO=<WORKSPACE>\fixtures\git-probe-shim
 GIT_CYCLE_BASELINE_HEAD=99c82f589b185aeea8d61bfd2aedd17b6626ac41

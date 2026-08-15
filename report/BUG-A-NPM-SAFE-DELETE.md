@@ -48,10 +48,14 @@ npm error [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":59,"threshol
 
 ## MINIMAL REPRO
 ```powershell
-# Clone to a NON-TEMP path. The shim deliberately skips os.tmpdir() paths,
-# so cloning to %TEMP% will NOT reproduce the shim behavior.
-git clone https://github.com/FlapPearLabs/workbuddy-safedelete-rootcause C:\workbuddy-safedelete-rootcause
-cd C:\workbuddy-safedelete-rootcause
+# Clone to a NON-TEMP, writable path (any drive). The shim deliberately
+# skips os.tmpdir() paths, so cloning to %TEMP% will NOT reproduce the
+# shim behavior. Prerequisites: Windows, PowerShell, Git, Node/npm on
+# PATH, npm-registry network access, and a WorkBuddy install for the
+# SHIM phases (see root README "Prerequisites").
+$repo = Join-Path $env:USERPROFILE 'workbuddy-safedelete-rootcause'
+git clone https://github.com/FlapPearLabs/workbuddy-safedelete-rootcause $repo
+cd $repo
 powershell -ExecutionPolicy Bypass -File .\bin\repro-all.ps1
 ```
 Expected key lines:

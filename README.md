@@ -1,7 +1,10 @@
 ﻿# WorkBuddy safe-delete / tsbx sandbox — root-cause investigation
 
-A self-contained, **one-click** reproducible investigation of two issues
-observed in a Windows dev environment running WorkBuddy (Tencent) 5.3.11:
+A self-contained investigation of two WorkBuddy (Tencent) filesystem issues
+observed in a Windows dev environment (5.3.11 / 5.3.13). **Bug A has a
+one-click deterministic repro. Bug B has a native WorkBuddy reproduction
+harness and a confirmed R1 reproduction, but is intermittent across the
+observed native runs.**
 
 - **Issue A** — `npm ci` is **aborted partway** by the safe-delete bulk-guard,
   leaving `node_modules` in a half-deleted state. **Directly reproduced in
@@ -10,29 +13,51 @@ observed in a Windows dev environment running WorkBuddy (Tencent) 5.3.11:
   by the lab probe proves partial mutation: `.package-lock.json` is silently
   trashed **before** the bulk-guard fires on the bigger batch.
 - **Issue B** — tracked Git worktree files disappear after `git switch` /
-  `git merge` while HEAD / index / blob remain intact. The Mavis lab probe
-  conclusively rules out the Node shim as the cause (11/11 per-step
+  `git merge` while HEAD / index / blob remain intact. The lab A/B probe
+  rules out the Node shim as the cause (11/11 per-step
   `WORKTREE_CHECK_VERDICT=CLEAN` in both NORMAL and SHIM-ONLY modes with
   a real branch delta). `tsbx.dll` is present in the WorkBuddy sandbox
   distribution and is a HIGH_CONFIDENCE_HYPOTHESIS for Bug B. Its exact
   attachment/interception behavior relevant to the Git anomaly was not
   directly traced. **A native WorkBuddy run (R1) reproduced
-  the worktree-only loss (59 unrelated tracked files)**; a follow-up
-  controlled four-checkpoint run (R2) was clean in that one shot, so the
-  anomaly is **intermittent across observed native runs** with the component
-  cause still unresolved. Full native evidence and confidence boundaries are
-  in [`report/EXECUTIVE-SUMMARY.md`](report/EXECUTIVE-SUMMARY.md) and
+  the worktree-only loss (59 unrelated tracked files)** using the
+  F1-shape harness (`bin/build-git-probe-f1-shape.ps1`, 160 tracked files /
+  3-path FF delta); a follow-up controlled four-checkpoint run (R2) was
+  clean in that one shot, so the anomaly is **intermittent across observed
+  native runs** with the component cause still unresolved. Full native
+  evidence and confidence boundaries are in
+  [`report/EXECUTIVE-SUMMARY.md`](report/EXECUTIVE-SUMMARY.md) and
   [`report/BUG-B-GIT-WORKTREE-LOSS.md`](report/BUG-B-GIT-WORKTREE-LOSS.md).
+
+## Prerequisites
+
+- **OS:** Windows 10/11 (NTFS). The scripts are Windows PowerShell 5.1+.
+- **PowerShell** (`powershell`) on PATH.
+- **Git** on PATH (the Git A/B control and Bug B harness invoke `git.exe`).
+- **Node.js + npm** on PATH (Bug A fixture install: `npm install` / `npm ci`).
+- **Network access to the npm registry** — Bug A Phase 1/2 fetches
+  `parse5@8.0.1` + `entities@8.0.0` from the registry.
+- **A normal WorkBuddy installation** (any version; 5.3.11/5.3.13 observed) —
+  required for the SHIM phases of Bug A and for the Bug B native flow.
+  `bin/repro-all.ps1` auto-discovers the install; pass `-WorkbuddyInstall`
+  if it is not found.
+- **Real WorkBuddy-native context** is required for the Bug B native run —
+  the kernel sandbox is only active for processes spawned inside a WorkBuddy
+  tool-call. See `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`.
+- **Clone to a NON-TEMP, writable path.** The shim deliberately skips
+  operations on `os.tmpdir()` paths (`genie-safe-delete.cjs`
+  `shouldUseNativeDelete`), so cloning to `%TEMP%` will not reproduce the
+  shim's behavior.
 
 ## Quick repro (30 seconds for Issue A)
 
 ```powershell
-# IMPORTANT: clone to a non-temp path. The shim deliberately skips
-# operations on os.tmpdir() paths (see genie-safe-delete.cjs
-# shouldUseNativeDelete), so cloning to %TEMP% will not reproduce
-# the shim's behavior.
-git clone https://github.com/FlapPearLabs/workbuddy-safedelete-rootcause D:\workbuddy-safedelete-rootcause
-cd D:\workbuddy-safedelete-rootcause
+# IMPORTANT: clone to a NON-TEMP writable path (any drive; do not assume D:
+# exists). The shim deliberately skips operations on os.tmpdir() paths, so
+# cloning to %TEMP% will not reproduce the shim's behavior.
+$repo = Join-Path $env:USERPROFILE 'workbuddy-safedelete-rootcause'
+git clone https://github.com/FlapPearLabs/workbuddy-safedelete-rootcause $repo
+cd $repo
 powershell -ExecutionPolicy Bypass -File .\bin\repro-all.ps1
 ```
 
@@ -54,13 +79,17 @@ PHASE3B 11x WORKTREE_CHECK_VERDICT=CLEAN
 PHASE4_RESULT=NOT_EXECUTED_REQUIRES_WORKBUDDY_PARENT
 ```
 
+The SHIM phases (PHASE1C/1D, PHASE2 SHIM, PHASE3B) require a WorkBuddy
+install to be present; without one they are skipped with
+`*_SKIPPED_WORKBUDDY_NOT_INSTALLED` markers.
+
 | Quick verdict | | |
 |---|---|---|
 | `ISSUE_A_NODE_DELETE` | NORMAL=PASS | WORKBUDDY_SHIM=BLOCKED |
 | `ISSUE_A_NPM_CI` | NORMAL_EXIT=0 | WORKBUDDY_SHIM_EXIT=1, BULK_GUARD_TRIGGERED=YES |
 | `ISSUE_B_GIT_NORMAL` | LOSS=NO (11/11 CLEAN) | |
 | `ISSUE_B_GIT_SHIM_ONLY` | LOSS=NO (11/11 CLEAN) | |
-| `ISSUE_B_GIT_FULL_SANDBOX` | **R1 REPRODUCED** (59-file worktree-only loss) | **R2 one-shot CLEAN** (intermittent; `GIT_COMPONENT_CAUSE=UNRESOLVED`) |
+| `ISSUE_B_GIT_FULL_SANDBOX` | **R1 REPRODUCED** (59-file worktree-only loss, F1-shape harness) | **R2 one-shot CLEAN** (intermittent; `GIT_COMPONENT_CAUSE=UNRESOLVED`) |
 
 ## Where to start (read in this order)
 
@@ -78,31 +107,42 @@ PHASE4_RESULT=NOT_EXECUTED_REQUIRES_WORKBUDDY_PARENT
 3. **[`report/ROOT_CAUSE_CLOSURE_REPORT.md`](report/ROOT_CAUSE_CLOSURE_REPORT.md)**
    — the closure summary (4-class data-loss analysis, layering summary,
    privacy / proprietary content audit).
-3. **[`report/sanitized-evidence.md`](report/sanitized-evidence.md)** — the
+4. **[`report/sanitized-evidence.md`](report/sanitized-evidence.md)** — the
    full evidence pack: source code line numbers, `tsbx_rules.json` content
    (paths redacted in the published copy), binary string evidence, audit
    log quotes, and the shim report capture that proves partial mutation.
-4. **[`report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`](report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md)**
-   — the complete, copy-pasteable procedure for running the Git probe from
-   inside a real WorkBuddy tool-call. Has 3 phases (baseline, allow-rule
-   A/B, optional ETW / ProcMon).
+5. **[`report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`](report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md)**
+   — the complete, copy-pasteable procedure for running the Bug B native
+   F1-shape probe from inside a real WorkBuddy tool-call. Has 3 phases
+   (baseline, allow-rule A/B, optional ETW / ProcMon) plus the deterministic
+   offline validation gate.
 
 ## Supporting artifacts
 
 - **[`report/environment-summary.txt`](report/environment-summary.txt)** —
-  WorkBuddy version, file SHAs, tsbx rule summary.
-- **[`report/results-latest.txt`](report/results-latest.txt)** — the full
-  orchestrator output from the last lab run.
-- **[`report/results-npm-ci.txt`](report/results-npm-ci.txt)** — npm ci
-  A/B structured records (Phase 1 + Phase 2).
+  WorkBuddy version, file SHAs, tsbx rule summary (historical capture).
+- **[`report/results-latest.txt`](report/results-latest.txt)** —
+  **HISTORICAL EVIDENCE** — full orchestrator output of the last pre-repair
+  lab run (uses `<WORKSPACE>` placeholders; produced by the old harness).
+- **[`report/results-npm-ci.txt`](report/results-npm-ci.txt)** —
+  **HISTORICAL EVIDENCE** — npm ci A/B structured records (Phase 1 + Phase 2).
 - **[`report/results-git-normal.txt`](report/results-git-normal.txt)** —
-  Git A/B NORMAL mode records (5 cycles + 1 merge = 11 per-step checks).
+  **HISTORICAL EVIDENCE** — Git A/B NORMAL mode records (5 cycles + 1 merge =
+  11 per-step checks; legacy record schema, retained as-is).
 - **[`report/results-git-shim-only.txt`](report/results-git-shim-only.txt)** —
-  Git A/B SHIM-ONLY mode records.
+  **HISTORICAL EVIDENCE** — Git A/B SHIM-ONLY mode records (legacy schema).
 - **[`report/tsbx_rules.original.json`](report/tsbx_rules.original.json)** —
-  unmodified backup of the rules file (sha256
-  `30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A`,
-  paths redacted for the WorkBuddy companion app in the published copy).
+  the **sanitized published copy** of the rules file. Hash provenance (see
+  `report/ENVIRONMENT-MODEL.md` §3):
+  - `ORIGINAL_LOCAL_SHA256 = 30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A`
+    (verified 2026-08-15 against the raw shipped bytes in the author's
+    WorkBuddy install; raw bytes are CRLF).
+  - `PUBLIC_SANITIZED_TSBX_SHA256 = 121c8e05805f6fec831a737dbe71c00d471dd85196b55cd89df94cb3bf68f8f2`
+    (the committed file; pinned byte-for-byte via `.gitattributes -text`).
+  - `PUBLIC_COPY_BYTE_IDENTICAL_TO_ORIGINAL = NO` — the published copy
+    redacts the WorkBuddy companion-app install paths
+    (`C:\openclaw\openclaw\**`, `D:\openclaw\proxy-agent\**`) to
+    `<OPENCLAW_INSTALL>` placeholders. Do not compare the two SHA256 values.
 - **[`report/results-allow-rule.txt`](report/results-allow-rule.txt)** — the
   procedure for the proposed allow-rule empirical test (not executed in
   this round; requires a controlled WorkBuddy restart, see
@@ -118,16 +158,38 @@ In `bin/`:
   shim report capture (the smoking gun for partial mutation).
 - `repro-node-delete.mjs` — Node `fs.rmSync` A/B (small 5 files vs large
   40 files).
-- `build-git-probe.ps1` / `check-worktree.ps1` / `run-git-cycles.ps1` —
-  disposable git repo with 60 tracked files on master, feature branch
-  with 46 modified / 5 deleted / 16 added / 4 renamed; verifies
-  worktree integrity after every step.
+- **`build-git-probe-f1-shape.ps1` — the AUTHORITATIVE Bug B native
+  harness** (160 tracked files, 60 test-like, tiny 3-path FF delta, 4
+  physical checkpoints A/B/C/D). This is the shape of the successful R1
+  reproduction and of the F1 natural incident. Use this for the Bug B
+  native flow (see `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`).
+- `build-git-probe.ps1` — **HISTORICAL / AUXILIARY STRESS PROBE** for Bug B
+  (60 tracked files, 46 modified / 5 deleted / 16 added / 4 renamed). It is
+  the negative-control fixture for the Bug A Git A/B phases in
+  `repro-all.ps1`; it is NOT the authoritative Bug B native reproduction
+  shape and must not be used as such.
+- `check-worktree.ps1` — per-step worktree integrity classifier (emits
+  `WORKTREE_CHECK_VERDICT` + per-class counts).
+- `run-git-cycles.ps1` — runs the switch/merge workload
+  (5 switch cycles + 1 merge = 11 mutation checks + 1 pre-op baseline).
+- `classify-run.ps1` — deterministic result classifier for a
+  `run-git-cycles.ps1` results file (distinguishes CLEAN /
+  WORKTREE_ONLY_LOSS / WORKTREE_CONTENT_DIVERGENCE /
+  PREEXISTING_NON_CLEAN / GIT_OPERATION_INTERFERENCE /
+  INSTRUMENTATION_ERROR / CHECKER_ERROR / NONZERO_GIT_EXIT /
+  TARGET_NOT_REACHED).
 - `build-fixture.ps1` — creates the small/large Node delete fixtures.
 - `run-as-workbuddy.ps1` — sets the WorkBuddy env vars and invokes a
-  child command. Refuses to run any command that targets the real
-  production project (script-level blacklist).
+  child command (auto-discovers the WorkBuddy install). Refuses to run any
+  command that targets the real production project (script-level
+  blacklist).
 - `probe-shim.cjs` — verifies whether the Node shim is loaded in the env.
-- `_lib.ps1` — shared library (env, paths, manifest, worktree classifier).
+- `_lib.ps1` — shared library (env, paths, manifest, worktree classifier,
+  `Remove-OwnedProbePath` scoped cleanup).
+- `test-owned-path-delete.ps1` / `test-classify-run.ps1` /
+  `test-tsbx-lab-rule.ps1` / `test-outcome-parser.ps1` /
+  `test-attribution-preop.ps1` — deterministic offline tests (no native
+  sandbox required; see `FINAL VALIDATION` in the experiment doc).
 
 ## Probe fixtures
 

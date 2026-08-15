@@ -17,7 +17,7 @@ $ErrorActionPreference = 'Continue'
 # (auto-resolved) or %TEMP%\workbuddy-rootcause-control.
 $here = (Resolve-Path $PSScriptRoot).Path
 $repoRoot = (Resolve-Path "$here\..").Path
-$projectBlacklist = 'D:\Dev\zhihu-grabber-toolkit'
+$projectBlacklist = $script:ProductionRepoPath
 $argJoined = ($Command + ' ' + ($Rest -join ' '))
 if ($argJoined -match [regex]::Escape($projectBlacklist)) {
     Write-Error "run-as-workbuddy: refusing to run a command that targets the real project ($projectBlacklist)"
@@ -29,7 +29,15 @@ $report = Join-Path $env:TEMP 'workbuddy-rootcause-control\report.jsonl'
 New-Item -ItemType Directory -Force -Path (Split-Path $report) | Out-Null
 New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
 
-$wb = 'D:\WORKBUDDY'
+# Auto-discover the WorkBuddy install (same logic as bin/_lib.ps1) instead
+# of assuming a fixed local path.
+. (Join-Path $PSScriptRoot '_lib.ps1')
+$ErrorActionPreference = 'Continue'   # restore this wrapper's policy after dot-source
+$wb = Resolve-WorkbuddyInstallPath
+if (-not $wb) {
+    Write-Error "run-as-workbuddy: WorkBuddy install not found; pass -WorkbuddyInstall via the environment or install to a known location"
+    exit 3
+}
 $shim = Join-Path $wb 'resources\app.asar.unpacked\cli\vendor\shim\genie-safe-delete.cjs'
 $guard = Join-Path $wb 'resources\app.asar.unpacked\cli\vendor\shim\safe-delete-bulk-guard.cjs'
 $node = (Get-Command node).Source

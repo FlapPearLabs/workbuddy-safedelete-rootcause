@@ -46,8 +46,8 @@ $MIN_DELETED  = 5
 $MIN_ADDED    = 16
 $MIN_RENAMED  = 4
 
-# Per the release-gate P4 rule, do NOT mavis-trash an old Git probe
-# before the experiment. The caller must pass a fresh unique dir
+# Per the release-gate P4 rule, do NOT delete an old Git probe before the
+# experiment. The caller must pass a fresh unique dir
 # (e.g. work/native-runs/<ts-guid>/git-probe). If the caller passes
 # a path that already exists, we refuse rather than trash, so the
 # caller can detect the collision and pick a new name.
@@ -63,7 +63,7 @@ try {
     git config user.email 'probe@workbuddy-rootcause-lab.invalid'
     git config user.name  'WorkBuddy Root-Cause Lab'
     git config core.autocrlf  $false
-    git config core.quotepath $off
+    git config core.quotepath false
 
     Write-Output "GIT_PROBE_INIT_REPO=$Repo"
 

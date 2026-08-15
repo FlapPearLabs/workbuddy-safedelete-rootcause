@@ -278,16 +278,18 @@ cookies).** Only the safe, abstracted facts are recorded.
 ## NEXT STEPS (for the native experiment, not for this document)
 
 The full procedure for closing the F1 question is in
-`report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`. The native experiment
-will run two probes:
+`report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`. The **authoritative** native
+flow runs the F1-shape probe (PROBE_B below) as the primary path:
 
-- **PROBE_A (broad):** the existing 60-file mutation probe
-  (`bin/build-git-probe.ps1`). Exercises large non-FF worktree
-  mutations.
-- **PROBE_B (F1-shape):** the new 160-file F1-shape probe
-  (`bin/build-git-probe-f1-shape.ps1`). Exercises a tiny 3-path
-  FF delta on a large worktree, mirroring the F1 natural
-  recurrence shape.
+- **PROBE_B (F1-shape) — AUTHORITATIVE:** `bin/build-git-probe-f1-shape.ps1`
+  (160 tracked / 60 test-like / tiny 3-path FF delta, 0 deletions, physical
+  checkpoints A/B/C/D). This is the shape of the F1 natural recurrence and
+  of the successful R1 reproduction. The current vendor procedure
+  (`report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`) runs PROBE_B only.
+- **PROBE_A (broad) — HISTORICAL / AUXILIARY:** `bin/build-git-probe.ps1`
+  (60 files, 46 modified / 5 deleted / 16 added / 4 renamed). Exercises large
+  non-FF worktree mutations; kept as a negative-control stress probe for the
+  Bug A Git A/B phases, NOT as the Bug B reproduction shape.
 
 If PROBE_B reproduces the worktree loss in the native WorkBuddy
 session (with both pre-restart and allow-rule phases), the F1

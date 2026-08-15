@@ -30,14 +30,15 @@ WORKBUDDY SHIM ARTIFACTS (sha256)
   tsbx.dll                       : (kernel file system minifilter, 614,448 bytes)
   genie-trash/win32-x64.exe      : (Rust crate trash-5.2.6, 2,670,352 bytes, signed by Tencent Technology (Shenzhen))
   tsbx_rules.json                : 30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A
+                                     (ORIGINAL_LOCAL_SHA256, raw shipped bytes; verified 2026-08-15)
 
 WORKBUDDY tsbx RULES (tsbx_rules.json)
   version          : 1
   default_action   : deny_write
   recyclebin_backup: true
   auto_grant       : true
-  file_rules_user  : ["D:\\openclaw\\proxy-agent\\**" -> inherit_user]
-  -- D:\Dev\** IS NOT in any allow-list --
+  file_rules_user  : ["<OPENCLAW_INSTALL>\\proxy-agent\\**" -> inherit_user]
+  -- <PROD_DEV_TREE>\** IS NOT in any allow-list --
 
 WORKBUDDY RUNTIME PROCESSES (observed during investigation)
   WorkBuddy.exe             (multiple, electron main + renderer + sidecar)

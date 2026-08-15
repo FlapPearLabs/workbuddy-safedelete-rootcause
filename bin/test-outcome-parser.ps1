@@ -19,18 +19,20 @@ $ErrorActionPreference = 'Stop'
 
 # Use a unique GUID-owned temp directory. The test itself owns this directory;
 # cleanup uses ordinary PowerShell Remove-Item ONLY against the exact GUID dir
-# (never a parent dir, never a repository path). No mavis-trash / unrelated
-# environment-utility dependency, so the deterministic parser regression no
-# longer depends on an external binary.
+# (never a parent dir, never a repository path). No external utility
+# dependency, so the deterministic parser regression no longer depends on
+# anything outside the repository.
 $tmpRoot = Join-Path $env:TEMP ('workbuddy-rootcause-control\parser-test-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmpRoot -Force | Out-Null
 $synthFile = Join-Path $tmpRoot 'synthetic-results.txt'
 try {
 
 # Synthetic results: 4 clean steps + 1 step with WORKTREE_ONLY_LOSS.
+# Tokens mirror the current bin/run-git-cycles.ps1 output exactly
+# (GIT_CYCLES_*_MUTATION_CHECK_COUNT is the canonical count token).
 $synth = @"
 GIT_CYCLES_START repo=D:\fake\repo cycles=5 merge=True
-GIT_CYCLES_EXPECTED_CHECK_COUNT=11
+GIT_CYCLES_EXPECTED_MUTATION_CHECK_COUNT=11
 WORKTREE_CHECK_LABEL=step-1a-switch-to-feature
 WORKTREE_CHECK_REPO=D:\fake\repo
 WORKTREE_CHECK_HEAD=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -57,7 +59,7 @@ WORKTREE_CHECK_MISSING label=step-3a-switch-to-feature classification=WORKTREE_O
 WORKTREE_CHECK_MISSING_COUNT=3
 WORKTREE_CHECK_VERDICT label=step-3a-switch-to-feature value=WORKTREE_ONLY_LOSS
 GIT_OPERATION_INTERFERENCE label=step-3a-switch-to-feature exit=0 target_reached=NO
-GIT_CYCLES_ACTUAL_CHECK_COUNT=3
+GIT_CYCLES_ACTUAL_MUTATION_CHECK_COUNT=3
 GIT_CYCLES_OK=NO
 GIT_CYCLES_INTERFERENCE_STEP=step-3a-switch-to-feature
 GIT_CYCLES_END

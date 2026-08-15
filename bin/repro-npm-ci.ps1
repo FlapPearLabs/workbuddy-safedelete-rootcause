@@ -18,7 +18,10 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '_lib.ps1')
 
-if (Test-Path $OutputFile) { mavis-trash $OutputFile }
+# The OutputFile lives in a directory explicitly created by the caller
+# (or by this script below); register its parent as an owned root for the
+# scoped cleanup helper.
+if (Test-Path $OutputFile) { Remove-OwnedProbePath -Path $OutputFile -OwnedRoots @((Split-Path $OutputFile -Parent)) }
 # Resolve to absolute path so the relative path doesn't shift when this
 # script's CWD changes (Push-Location $Probe later in the script).
 $OutputFile = [System.IO.Path]::GetFullPath($OutputFile)
@@ -38,7 +41,7 @@ if (-not (Test-Path (Join-Path $Probe 'package-lock.json'))) {
 }
 
 $probeNodeModules = Join-Path $Probe 'node_modules'
-if (Test-Path $probeNodeModules) { mavis-trash $probeNodeModules }
+if (Test-Path $probeNodeModules) { Remove-OwnedProbePath $probeNodeModules }
 
 Record ("NPM_CI_PROBE=" + $Probe)
 Record ("NPM_CI_WORKBUDDY_INSTALL=" + $WorkbuddyInstall)
@@ -108,13 +111,14 @@ if (-not $shimAvailable) {
     # Only create the parent dir; the report file itself is written by the shim.
     New-Item -ItemType Directory -Force -Path (Split-Path $shimReportPath) | Out-Null
     New-Item -ItemType Directory -Force -Path $shimStateDir | Out-Null
-    # If a stale report file or state dir exists from a prior run, remove it.
-    if (Test-Path -PathType Leaf $shimReportPath) { mavis-trash $shimReportPath }
-    if (Test-Path $shimStateDir) { mavis-trash $shimStateDir }
+    # If a stale report file or state dir exists from a prior run, remove it
+    # (both are GUID-owned paths under TEMP\workbuddy-rootcause-control).
+    if (Test-Path -PathType Leaf $shimReportPath) { Remove-OwnedProbePath $shimReportPath }
+    if (Test-Path $shimStateDir) { Remove-OwnedProbePath $shimStateDir }
     New-Item -ItemType Directory -Force -Path $shimStateDir | Out-Null
 
     # Reset node_modules to a fresh install state under the shim
-    if (Test-Path $probeNodeModules) { mavis-trash $probeNodeModules }
+    if (Test-Path $probeNodeModules) { Remove-OwnedProbePath $probeNodeModules }
     Assert-CleanWorkbuddyEnv
     Set-WorkbuddyShimEnv -WbPath $WorkbuddyInstall -StateDir $shimStateDir -ReportPath $shimReportPath
     Record "NPM_CI_PHASE2_SHIM_INJECTED=yes"

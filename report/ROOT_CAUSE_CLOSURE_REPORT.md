@@ -395,8 +395,8 @@ diagnostics (narrow sandbox-rule A/B, ETW / ProcMon) are optional and gated as
 | `bin/repro-node-delete.mjs` | Node fs.rmSync A/B |
 | `bin/probe-shim.cjs` | Verifies the Node shim is loaded in the env |
 | `bin/build-fixture.ps1` | Creates the small/large Node delete fixtures |
-| `bin/build-git-probe.ps1` | Initializes the disposable git repo with real branch delta |
-| `bin/build-git-probe-f1-shape.ps1` | F1-shape native probe (R1/R2 harness) |
+| `bin/build-git-probe.ps1` | Initializes the disposable git repo with real branch delta (HISTORICAL / AUXILIARY for Bug B; negative-control fixture for Bug A Git A/B) |
+| `bin/build-git-probe-f1-shape.ps1` | F1-shape native probe — AUTHORITATIVE Bug B harness (R1/R2) |
 | `bin/check-worktree.ps1` | Verifies tracked file integrity after each git operation |
 | `bin/run-git-cycles.ps1` | Runs N switch cycles + 1 fast-forward merge |
 | `bin/assert-native-workbuddy-context.ps1` | Confirms real WorkBuddy ancestry |

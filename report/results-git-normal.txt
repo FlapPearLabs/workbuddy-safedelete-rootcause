@@ -1,4 +1,11 @@
-﻿
+﻿# HISTORICAL EVIDENCE — Git A/B NORMAL-mode records from the pre-repair lab
+# run. Produced by the LEGACY harness: the record schema below (GIT_CYCLE_STEP,
+# WORKTREE_CHECK_TRACKED_COUNT, ...) predates the current bin/run-git-cycles.ps1
+# / bin/check-worktree.ps1 schema (GIT_OPERATION_STEP, WORKTREE_CHECK_HEAD_PATH_COUNT,
+# GIT_CYCLES_*_MUTATION_CHECK_COUNT). The core claim — 11/11
+# WORKTREE_CHECK_VERDICT=CLEAN — is unaffected and remains valid. Do not
+# re-generate this file with the current harness; it is kept as-is.
+
 GIT_CYCLES_START repo=<WORKSPACE>\fixtures\git-probe-normal cycles=5 merge=True
 GIT_CYCLE_BASELINE_REPO=<WORKSPACE>\fixtures\git-probe-normal
 GIT_CYCLE_BASELINE_HEAD=4ff3abeaef25489537def8594730bc0479f5609f

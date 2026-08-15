@@ -1,19 +1,26 @@
 ﻿# WorkBuddy Root-Cause Closure Lab
 
+> **HISTORICAL — internal lab README from the original investigation.**
+> The canonical entry point is the repository **root `README.md`**; the
+> canonical Bug B native procedure is `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`.
+> The repository is `FlapPearLabs/workbuddy-safedelete-rootcause` (this
+> file predates the rename from the working title `workbuddy-rootcause-lab`).
+
 A disposable, isolated probe environment used to investigate the safe-delete
 and sandbox behavior of WorkBuddy (Tencent) without touching the real
 production repository or any system state outside this lab and the user's
 temporary directory.
 
 **DO NOT** add real production files here. The lab is intended to be
-disposable; `mavis-trash` is used throughout for clean removal.
+disposable; cleanup is performed by the repository-owned scoped helper
+`Remove-OwnedProbePath` in `bin/_lib.ps1` (no external tools required).
 
 ## Layout
 
 ```
 workbuddy-rootcause-lab/
 ├── bin/                                # PowerShell + Node probe scripts
-│   ├── _lib.ps1                        # shared library (env, paths, manifest, worktree classifier)
+│   ├── _lib.ps1                        # shared library (env, paths, manifest, worktree classifier, scoped cleanup)
 │   ├── probe-shim.cjs                  # verifies Node shim is loaded
 │   ├── repro-node-delete.mjs           # fs.rmSync small + large
 │   ├── repro-npm-ci.ps1                # npm ci A/B with pre/post file manifest
@@ -46,7 +53,7 @@ workbuddy-rootcause-lab/
 ## How to reproduce
 
 ```powershell
-git clone https://github.com/FlapPearLabs/workbuddy-rootcause-lab <WORKSPACE>
+git clone https://github.com/FlapPearLabs/workbuddy-safedelete-rootcause <WORKSPACE>
 cd <WORKSPACE>
 powershell -ExecutionPolicy Bypass -File .\bin\repro-all.ps1
 ```

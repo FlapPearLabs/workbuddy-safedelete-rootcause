@@ -100,8 +100,9 @@ if (totalCount >= context.threshold) {
 ## C. `tsbx_rules.json` — full content (redacted copy)
 
 - **Live path:** `<WORKBUDDY_INSTALL>/resources/app.asar.unpacked/cli/vendor/sandbox/5.3.3/tsbx_rules.json`
-- **SHA256:** `30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A`
-- **Lab copy:** `report/tsbx_rules.original.json` (identical hash, paths redacted for the WorkBuddy companion app)
+- **ORIGINAL_LOCAL_SHA256** (raw shipped bytes): `30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A` (verified 2026-08-15)
+- **PUBLIC_SANITIZED_TSBX_SHA256** (`report/tsbx_rules.original.json`, committed, byte-pinned via `.gitattributes -text`): `121c8e05805f6fec831a737dbe71c00d471dd85196b55cd89df94cb3bf68f8f2`
+- **PUBLIC_COPY_BYTE_IDENTICAL_TO_ORIGINAL = NO** — the published copy redacts the WorkBuddy companion-app install paths (`C:\openclaw\openclaw\**`, `D:\openclaw\proxy-agent\**`) to `<OPENCLAW_INSTALL>` placeholders; JSON structure, rule types, and all other rules are retained verbatim.
 
 ```json
 {
@@ -400,8 +401,9 @@ Raw audit log event (sanitized, project name replaced with `<real project>`):
 
 The original `tsbx_rules.json` is preserved at:
 - `<WORKBUDDY_INSTALL>/resources/app.asar.unpacked/cli/vendor/sandbox/5.3.3/tsbx_rules.json`
-  (sha256 `30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A`)
-- Lab copy: `report/tsbx_rules.original.json` (identical hash, paths redacted for the WorkBuddy companion app).
+  (ORIGINAL_LOCAL_SHA256 `30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A`, raw shipped bytes, verified 2026-08-15)
+- Lab copy: `report/tsbx_rules.original.json`
+  (PUBLIC_SANITIZED_TSBX_SHA256 `121c8e05805f6fec831a737dbe71c00d471dd85196b55cd89df94cb3bf68f8f2` — NOT byte-identical; companion-app install paths redacted to `<OPENCLAW_INSTALL>`).
 
 A narrow lab rule is **designed but not yet applied to the live system** (would require either a WorkBuddy restart or a confirmed hot-reload mechanism). The proposed rule is:
 

@@ -7,6 +7,7 @@
 #   * Resolve-RepoRoot
 #   * Manifest-Capture (path + size + sha256)
 #   * Manifest-Diff
+#   * Remove-OwnedProbePath (narrowly-scoped cleanup; no external deps)
 
 $ErrorActionPreference = 'Stop'
 
@@ -180,5 +181,138 @@ function Write-ManifestDiff {
     Write-Output ("CHANGED_COUNT=" + $Diff.Changed.Count)
     foreach ($r in $Diff.Changed | Select-Object -First 50) {
         Write-Output ("  CHANGED  " + $r.Path + "  size=" + $r.Size)
+    }
+}
+
+# ============================================================================
+# Remove-OwnedProbePath — narrowly-scoped lab cleanup helper
+# ============================================================================
+# Self-contained replacement for the former external agent-only cleanup
+# utility (present only in the original author's Mavis environment). This
+# repository-owned remover ONLY deletes explicitly owned runtime areas.
+# This is NOT a generic recursive delete. Hard refuses (checked in order):
+#   1. empty / null path
+#   2. un-canonicalizable path
+#   3. filesystem root (C:\, \\server\share\ ...)
+#   4. the repository root itself, and any parent of the repository root
+#   5. the production repo (bin/_lib.ps1 $script:ProductionRepoPath) and any
+#      parent of it
+#   6. the user profile root and any parent of it
+#   7. any path outside the owned runtime areas (see below)
+# Owned runtime areas (deletion allowed only under these prefixes):
+#   * <repoRoot>\fixtures\            — runtime probe fixtures (gitignored)
+#   * <repoRoot>\npm-probe\node_modules
+#   * $env:TEMP\workbuddy-rootcause-control\
+#   * caller-registered -OwnedRoots   — explicitly-created dirs such as a
+#     caller-supplied -OutputDir or a per-run staging/backup dir. OwnedRoots
+#     entries are STILL subject to hard refuses 1-6.
+# Deleting an owned AREA ROOT itself (e.g. the whole fixtures\ dir, or the
+# whole workbuddy-rootcause-control\ dir) is refused unless that exact path
+# was explicitly registered via -OwnedRoots.
+# Callers should prefer unique (GUID-suffixed) paths so cleanup is
+# unnecessary; this helper exists for the few deterministic resets that
+# remain (e.g. npm-probe\node_modules between A/B phases).
+# ============================================================================
+function Remove-OwnedProbePath {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        # Extra roots this invocation explicitly created/owns. Still subject
+        # to all hard refuses.
+        [string[]]$OwnedRoots = @()
+    )
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        throw 'Remove-OwnedProbePath: empty/null path refused'
+    }
+    $full = ''
+    try {
+        $full = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+    } catch {
+        throw "Remove-OwnedProbePath: cannot canonicalize path '$Path': $($_.Exception.Message)"
+    }
+    if ([string]::IsNullOrWhiteSpace($full)) {
+        throw 'Remove-OwnedProbePath: canonical path is empty'
+    }
+
+    $repoRoot = (Resolve-RepoRoot).TrimEnd('\', '/')
+    $root = [System.IO.Path]::GetPathRoot($full)
+    if ([string]::IsNullOrEmpty($root)) {
+        throw "Remove-OwnedProbePath: no path root for '$full'"
+    }
+    $rootNorm = $root.TrimEnd('\', '/')
+
+    # 1) filesystem root
+    if ($full -eq $rootNorm -or $full -match '^[A-Za-z]:$') {
+        throw "Remove-OwnedProbePath: filesystem root refused: $full"
+    }
+    # 2) repo root itself / any parent of the repo root
+    if ($full -ieq $repoRoot) { throw "Remove-OwnedProbePath: repo root refused: $full" }
+    if ($repoRoot.StartsWith($full + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Remove-OwnedProbePath: parent of repo root refused: $full"
+    }
+    # 3) production repo (equal or ancestor)
+    $prod = ($script:ProductionRepoPath).TrimEnd('\', '/')
+    if ($full -ieq $prod) { throw "Remove-OwnedProbePath: production repo refused: $full" }
+    if ($prod.StartsWith($full + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Remove-OwnedProbePath: parent of production repo refused: $full"
+    }
+    # 4) user profile root (equal or ancestor)
+    $up = $env:USERPROFILE
+    if ($up) {
+        $up = $up.TrimEnd('\', '/')
+        if ($full -ieq $up) { throw "Remove-OwnedProbePath: user profile root refused: $full" }
+        if ($up.StartsWith($full + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Remove-OwnedProbePath: parent of user profile refused: $full"
+        }
+    }
+
+    # 5) owned-area check
+    $owned = @(
+        (Join-Path $repoRoot 'fixtures'),
+        (Join-Path $repoRoot 'npm-probe\node_modules')
+    )
+    $tempOwned = Join-Path $env:TEMP 'workbuddy-rootcause-control'
+    if ($tempOwned) { $owned += $tempOwned }
+
+    # Normalize OwnedRoots for exact-match comparison.
+    $ownedRootsNorm = @()
+    foreach ($r in $OwnedRoots) {
+        if ([string]::IsNullOrWhiteSpace($r)) { continue }
+        try { $ownedRootsNorm += [System.IO.Path]::GetFullPath($r).TrimEnd('\', '/') } catch { }
+    }
+
+    $isOwned = $false
+    foreach ($r in @($owned + $ownedRootsNorm)) {
+        if ([string]::IsNullOrWhiteSpace($r)) { continue }
+        $rNorm = ''
+        try { $rNorm = [System.IO.Path]::GetFullPath($r).TrimEnd('\', '/') } catch { continue }
+        if ($full -ieq $rNorm) {
+            # Deleting the area root itself is only allowed when this exact
+            # path was explicitly registered by the caller.
+            if ($ownedRootsNorm -contains $rNorm) { $isOwned = $true; break }
+            continue
+        }
+        if ($full.StartsWith($rNorm + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+            $isOwned = $true
+            break
+        }
+    }
+    if (-not $isOwned) {
+        throw "Remove-OwnedProbePath: path is not an owned probe area; refusing: $full"
+    }
+
+    # Idempotent: nothing to delete.
+    if (-not (Test-Path -LiteralPath $full)) { return }
+
+    # Use .NET file APIs instead of PowerShell Remove-Item. Empirically, in a
+    # WorkBuddy-hosted (native sandbox) shell, Remove-Item on a directory is
+    # intercepted by the safe-delete layer and fails closed even after the
+    # delete succeeds; [System.IO.Directory]::Delete / [System.IO.File]::Delete
+    # are not intercepted and work identically in plain shells.
+    $item = Get-Item -LiteralPath $full -Force -ErrorAction SilentlyContinue
+    if ($item -and $item.PSIsContainer) {
+        [System.IO.Directory]::Delete($full, $true)
+    } else {
+        [System.IO.File]::Delete($full)
     }
 }

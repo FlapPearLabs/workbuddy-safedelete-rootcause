@@ -45,7 +45,9 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '_lib.ps1')
 
-if (Test-Path $OutputFile) { mavis-trash $OutputFile }
+# The OutputFile lives in a directory explicitly created by the caller
+# (or by this script below); register its parent as an owned root.
+if (Test-Path $OutputFile) { Remove-OwnedProbePath -Path $OutputFile -OwnedRoots @((Split-Path $OutputFile -Parent)) }
 $OutputFile = [System.IO.Path]::GetFullPath($OutputFile)
 New-Item -ItemType Directory -Path (Split-Path $OutputFile) -Force | Out-Null
 "" | Set-Content $OutputFile -Encoding UTF8
@@ -61,8 +63,9 @@ function Record {
 $expectedChecks = (2 * $Cycles) + $(if ($Merge) { 1 } else { 0 })
 
 # REPAIR B: distinguish mutation checks from the single pre-op baseline check.
+# Canonical tokens: GIT_CYCLES_EXPECTED_MUTATION_CHECK_COUNT /
+# GIT_CYCLES_ACTUAL_MUTATION_CHECK_COUNT (no legacy alias is emitted).
 Record ("GIT_CYCLES_START repo=" + $Repo + " cycles=" + $Cycles + " merge=" + $Merge)
-Record ("GIT_CYCLES_EXPECTED_CHECK_COUNT=" + $expectedChecks)              # retained for compatibility
 Record ("GIT_CYCLES_EXPECTED_MUTATION_CHECK_COUNT=" + $expectedChecks)
 Record ("GIT_CYCLES_BASELINE_CHECK_COUNT=1")
 

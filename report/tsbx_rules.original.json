@@ -58,13 +58,13 @@
         { "path": "%APPDATA%\\Microsoft\\Windows\\PowerShell\\**",  "type": "inherit_user", "_comment": "shell history" },
         { "path": "%LOCALAPPDATA%\\Microsoft\\Windows\\PowerShell\\**", "type": "inherit_user", "_comment": "shell cache" },
 
-        { "path": "C:\\openclaw\\openclaw\\**",         "type": "inherit_user", "_comment": "WorkBuddy companion app (path redacted)" },
+        { "path": "<OPENCLAW_INSTALL>\\openclaw\\**",  "type": "inherit_user", "_comment": "WorkBuddy companion app (path redacted)" },
         { "path": "%USERPROFILE%\\.openclaw\\**",       "type": "inherit_user", "_comment": "WorkBuddy companion app config" }
 
     ],
 
     "file_rules_user": [
-        { "path": "D:\\openclaw\\proxy-agent\\**", "type": "inherit_user", "_comment": "WorkBuddy proxy agent (path redacted)" }
+        { "path": "<OPENCLAW_INSTALL>\\proxy-agent\\**", "type": "inherit_user", "_comment": "WorkBuddy proxy agent (path redacted)" }
     ],
 
     "registry_rules": [],

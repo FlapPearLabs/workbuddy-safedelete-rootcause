@@ -1,4 +1,11 @@
-﻿
+﻿# HISTORICAL EVIDENCE — full orchestrator output of the LAST PRE-REPAIR lab
+# run (2026-08-14). Produced by the original harness, which used the author's
+# local cleanup utility; the CURRENT harness (bin/*, this commit) uses the
+# repository-owned Remove-OwnedProbePath helper and emits the same PHASE_*
+# markers without any external tool. Record schema in this file matches the
+# current bin/ scripts except where noted in report/README.md. Literal local
+# lab-root paths have been replaced with <WORKSPACE> placeholders.
+
 REPRO_ALL_START timestamp=2026-08-14T00:48:34.1264542+08:00
 REPRO_ALL_REPO_ROOT=<WORKSPACE>
 REPRO_ALL_OUTPUT_DIR=<WORKSPACE>\work\repro-post
@@ -44,7 +51,7 @@ PHASE1C FILE_COUNT_BEFORE=5
 PHASE1C SHIM_SESSION_ID=simulated-bundle-session
 PHASE1C STILL_EXISTS_AFTER=false
 PHASE1C EXIT_CODE=0
-PHASE1C_SHIM_REPORT {"operation":"trash","runtime":"node","path":"D:\\workbuddy-regression\\fixtures\\node-delete\\small","timestamp":1786639745411}
+PHASE1C_SHIM_REPORT {"operation":"trash","runtime":"node","path":"<WORKSPACE>\\fixtures\\node-delete\\small","timestamp":1786639745411}
 --- PHASE 1D: SHIM large ---
 PHASE1D_FIXTURE BUILT 40 files under <WORKSPACE>\fixtures\node-delete\large
 PHASE1D MODE=shim
@@ -52,8 +59,8 @@ PHASE1D WHICH=large
 PHASE1D TARGET=<WORKSPACE>\fixtures\node-delete\large
 PHASE1D FILE_COUNT_BEFORE=40
 PHASE1D SHIM_SESSION_ID=simulated-bundle-session
-PHASE1D THROWN=Error: [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":40,"threshold":20,"scope":"turn","targets":["D:\\workbuddy-regression\\fixtures\\node-delete\\large"],"targetCount":1}
-PHASE1D STACK_HEAD=Error: [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":40,"threshold":20,"scope":"turn","targets":["D:\\workbuddy-regression\\fixtures\\node-delete\\large"],"targetCount":1} |     at checkBulkDeleteGuard (<WORKBUDDY_INSTALL>\resources\app.asar.unpacked\cli\vendor\shim\genie-safe-delete.cjs:222:19) |     at tryTrash (<WORKBUDDY_INSTALL>\resources\app.asar.unpacked\cli\vendor\shim\genie-safe-delete.cjs:546:5) |     at tryRm (<WORKBUDDY_INSTALL>\resources\app.asar.unpacked\cli\vendor\shim\genie-safe-delete.cjs:722:5)
+PHASE1D THROWN=Error: [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":40,"threshold":20,"scope":"turn","targets":["<WORKSPACE>\\fixtures\\node-delete\\large"],"targetCount":1}
+PHASE1D STACK_HEAD=Error: [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":40,"threshold":20,"scope":"turn","targets":["<WORKSPACE>\\fixtures\\node-delete\\large"],"targetCount":1} |     at checkBulkDeleteGuard (<WORKBUDDY_INSTALL>\resources\app.asar.unpacked\cli\vendor\shim\genie-safe-delete.cjs:222:19) |     at tryTrash (<WORKBUDDY_INSTALL>\resources\app.asar.unpacked\cli\vendor\shim\genie-safe-delete.cjs:546:5) |     at tryRm (<WORKBUDDY_INSTALL>\resources\app.asar.unpacked\cli\vendor\shim\genie-safe-delete.cjs:722:5)
 PHASE1D EXIT_CODE=1
 
 ==== PHASE 2: npm ci A/B ====
@@ -87,10 +94,10 @@ PHASE2 NPM_CI_PHASE2_INSTALL_EXIT=0
 PHASE2 NPM_CI_PHASE2_INSTALL_MANIFEST_FILE_COUNT=92
 PHASE2 NPM_CI_PHASE2_CI_CMD=npm ci --no-audit --no-fund
 PHASE2 NPM_CI_PHASE2_CI_EXIT=1
-PHASE2 NPM_CI_PHASE2_CI_OUTPUT_HEAD=npm.cmd : npm error [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":59,"threshold":20,"scope":"turn","targets | ":["D:\\workbuddy-regression\\npm-probe\\node_modules\\entities"],"targetCount":1} | At <WORKSPACE>\bin\repro-npm-ci.ps1:140 char:22 | +         $phase2Out = & npm.cmd ci --no-audit --no-fund 2>&1 | Out-Str ... | +                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+PHASE2 NPM_CI_PHASE2_CI_OUTPUT_HEAD=npm.cmd : npm error [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":59,"threshold":20,"scope":"turn","targets | ":["<WORKSPACE>\\npm-probe\\node_modules\\entities"],"targetCount":1} | At <WORKSPACE>\bin\repro-npm-ci.ps1:140 char:22 | +         $phase2Out = & npm.cmd ci --no-audit --no-fund 2>&1 | Out-Str ... | +                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 PHASE2 NPM_CI_PHASE2_BULK_GUARD_TRIGGERED=yes
 PHASE2 NPM_CI_PHASE2_BULK_GUARD_MARKER=npm.cmd : npm error [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":59,"threshold":20,"scope":"turn","targets
-":["D:\\workbuddy-regression\\npm-probe\\node_modules\\entities"],"targetCount":1}
+":["<WORKSPACE>\\npm-probe\\node_modules\\entities"],"targetCount":1}
 At <WORKSPACE>\bin\repro-npm-ci.ps1:140 char:22
 +         $phase2Out = & npm.cmd ci --no-audit --no-fund 2>&1 | Out-Str ...
 +                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -142,14 +149,14 @@ PHASE2_DETAIL NPM_CI_PHASE2_INSTALL_MANIFEST_FILE_COUNT=92
 PHASE2_DETAIL NPM_CI_PHASE2_CI_CMD=npm ci --no-audit --no-fund
 PHASE2_DETAIL NPM_CI_PHASE2_CI_EXIT=1
 PHASE2_DETAIL NPM_CI_PHASE2_CI_OUTPUT_HEAD=npm.cmd : npm error [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":59,"threshold":20,"scope":"turn","targets
-PHASE2_DETAIL  | ":["D:\\workbuddy-regression\\npm-probe\\node_modules\\entities"],"targetCount":1}
+PHASE2_DETAIL  | ":["<WORKSPACE>\\npm-probe\\node_modules\\entities"],"targetCount":1}
 PHASE2_DETAIL  | At <WORKSPACE>\bin\repro-npm-ci.ps1:140 char:22
 PHASE2_DETAIL  | +         $phase2Out = & npm.cmd ci --no-audit --no-fund 2>&1 | Out-Str ...
 PHASE2_DETAIL  | +                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 PHASE2_DETAIL 
 PHASE2_DETAIL NPM_CI_PHASE2_BULK_GUARD_TRIGGERED=yes
 PHASE2_DETAIL NPM_CI_PHASE2_BULK_GUARD_MARKER=npm.cmd : npm error [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":59,"threshold":20,"scope":"turn","targets
-PHASE2_DETAIL ":["D:\\workbuddy-regression\\npm-probe\\node_modules\\entities"],"targetCount":1}
+PHASE2_DETAIL ":["<WORKSPACE>\\npm-probe\\node_modules\\entities"],"targetCount":1}
 PHASE2_DETAIL At <WORKSPACE>\bin\repro-npm-ci.ps1:140 char:22
 PHASE2_DETAIL +         $phase2Out = & npm.cmd ci --no-audit --no-fund 2>&1 | Out-Str ...
 PHASE2_DETAIL +                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

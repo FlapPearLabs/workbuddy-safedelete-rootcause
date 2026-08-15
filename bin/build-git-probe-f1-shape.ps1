@@ -84,8 +84,8 @@ if ($Repo -match [regex]::Escape($script:ProductionRepoPath)) {
     throw "refusing to build an F1-shape probe at the production path"
 }
 
-# Per the release-gate P4 rule, do NOT mavis-trash an old Git probe
-# before the experiment. The caller must pass a fresh unique dir
+# Per the release-gate P4 rule, do NOT delete an old Git probe before the
+# experiment. The caller must pass a fresh unique dir
 # (e.g. work/native-runs/<ts-guid>/git-probe). If the caller passes
 # a path that already exists, we refuse rather than trash, so the
 # caller can detect the collision and pick a new name.
@@ -193,7 +193,7 @@ try {
     git config user.email 'probe@workbuddy-rootcause-lab.invalid'
     git config user.name  'WorkBuddy Root-Cause Lab'
     git config core.autocrlf  $false
-    git config core.quotepath $off
+    git config core.quotepath false
 
     Write-Output "GIT_PROBE_F1_SHAPE_INIT_REPO=$Repo"
 

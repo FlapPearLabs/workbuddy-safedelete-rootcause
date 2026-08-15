@@ -50,7 +50,16 @@ local only). This document is referenced by `BUG-A-NPM-SAFE-DELETE.md`,
 | `safe-delete-bulk-guard.cjs` | `EA40BA9DFD90D6555AC516AE3CA9C1BE7332D826781FBB07AC071903D88CA822` | bulk-guard — throws `SAFE_DELETE_BULK_CONFIRM_REQUIRED` at threshold 20 (Bug A) |
 | `tsbx.dll` | 614,448 bytes (kernel minifilter) | present in the sandbox distribution; candidate component for Bug B (attachment/interception semantics not directly traced) |
 | `genie-trash/win32-x64.exe` | 2,670,352 bytes (Rust crate trash-5.2.6, Tencent-signed) | performs the actual move-to-recycle-bin for the shim |
-| `tsbx_rules.json` | `30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A` | sandbox rule file (see §4) |
+| `tsbx_rules.json` (live, raw bytes) | `30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A` — **ORIGINAL_LOCAL_SHA256** (raw shipped CRLF bytes; re-verified 2026-08-15 against the author's install) | sandbox rule file (see §4) |
+| `report/tsbx_rules.original.json` (published) | `121c8e05805f6fec831a737dbe71c00d471dd85196b55cd89df94cb3bf68f8f2` — **PUBLIC_SANITIZED_TSBX_SHA256** (committed file; byte-pinned via `.gitattributes -text`) | sanitized published copy |
+
+> **Hash provenance (REPAIR-6).** `PUBLIC_COPY_BYTE_IDENTICAL_TO_ORIGINAL = NO`.
+> The published copy redacts the WorkBuddy companion-app install paths
+> (`C:\openclaw\openclaw\**`, `D:\openclaw\proxy-agent\**`) to
+> `<OPENCLAW_INSTALL>` placeholders and normalizes descriptive comments;
+> JSON structure, rule types, and every other rule are retained verbatim.
+> The two SHA256 values above are therefore intentionally different — do
+> not compare them directly.
 
 ## 4. tsbx sandbox rules (observed)
 

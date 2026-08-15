@@ -1,6 +1,10 @@
-﻿
+﻿# HISTORICAL EVIDENCE — npm ci A/B structured records (Phase 1 + Phase 2)
+# from the pre-repair lab run (2026-08-13/14). Produced by the original
+# harness; the CURRENT bin/repro-npm-ci.ps1 emits the same NPM_CI_* tokens
+# without any external tool. Literal local paths are placeholder'd.
+
 NPM_CI_PROBE=<WORKSPACE>\npm-probe
-NPM_CI_WORKBUDDY_INSTALL=D:\WORKBUDDY
+NPM_CI_WORKBUDDY_INSTALL=<WORKBUDDY_INSTALL>
 
 ==== PHASE 1: NORMAL (no WorkBuddy shim) ====
 NPM_CI_PHASE1_ENV_CLEAN=yes

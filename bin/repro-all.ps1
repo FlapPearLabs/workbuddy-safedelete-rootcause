@@ -32,7 +32,14 @@ if (-not $OutputDir) {
 # Always convert to absolute path so that downstream Push-Location calls in
 # child scripts don't pollute the relative resolution of $results / $OutputDir.
 $OutputDir = [System.IO.Path]::GetFullPath($OutputDir)
-if (Test-Path $OutputDir) { mavis-trash $OutputDir }
+# The caller-supplied/default OutputDir is explicitly created by this script,
+# so register it as an owned root for the scoped cleanup helper.
+$script:ReproOwnedRoots = @($OutputDir)
+function Remove-Owned {
+    param([string]$Path)
+    Remove-OwnedProbePath -Path $Path -OwnedRoots $script:ReproOwnedRoots
+}
+if (Test-Path $OutputDir) { Remove-Owned $OutputDir }
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 
 $results = Join-Path $OutputDir 'results.txt'
@@ -78,7 +85,7 @@ $gitProbeShim = Join-Path $repoRoot 'fixtures\git-probe-shim'
 # npm-probe/ (package.json, package-lock.json) are preserved; only node_modules
 # is wiped and regenerated.
 #
-# Per P4, do NOT mavis-trash an old Git probe before the experiment — the
+# Per P4, do NOT delete an old Git probe before the experiment — the
 # F1 natural incident may depend on WorkBuddy's own delete path. The probe
 # scripts now refuse to start if the target path already exists, so the
 # repro-all orchestrator must use a unique dir each time it runs.
@@ -97,14 +104,10 @@ foreach ($d in @($nodeDeleteSmall, $nodeDeleteLarge, $gitProbeNormal, $gitProbeS
     }
 }
 $npmNodeModules = Join-Path $npmProbe 'node_modules'
-if (Test-Path $npmNodeModules) { mavis-trash $npmNodeModules }
-# also clear any leftover manifest / shim report from prior runs
-foreach ($f in @(
-    (Join-Path $npmProbe '_manifest_phase1.txt'),
-    (Join-Path $npmProbe '_manifest_phase2.txt')
-)) {
-    if (Test-Path $f) { mavis-trash $f }
-}
+if (Test-Path $npmNodeModules) { Remove-Owned $npmNodeModules }
+# NOTE: npm-probe/_manifest_phase1.txt and _manifest_phase2.txt are
+# overwritten by bin/repro-npm-ci.ps1 on every run (Set-Content), so no
+# cleanup is needed here; they are owned files of the npm-probe fixture.
 
 # ============================================================================
 # PHASE 0 — Environment probe
@@ -143,7 +146,7 @@ if ($wbShimAvailable) {
     $shimState = Join-Path $OutputDir 'shim-state-node'
     New-Item -ItemType Directory -Force -Path $shimState | Out-Null
     New-Item -ItemType Directory -Force -Path (Split-Path $shimReport) | Out-Null
-    if (Test-Path $shimReport) { mavis-trash $shimReport }
+    if (Test-Path $shimReport) { Remove-Owned $shimReport }
     Set-WorkbuddyShimEnv -WbPath $WorkbuddyInstall -StateDir $shimState -ReportPath $shimReport
     & node (Join-Path $PSScriptRoot 'repro-node-delete.mjs') shim small $nodeDeleteSmall 2>&1 | ForEach-Object { Log "PHASE1C $_" }
     if (Test-Path $shimReport) { Get-Content $shimReport | ForEach-Object { Log "PHASE1C_SHIM_REPORT $_" } }
@@ -155,7 +158,7 @@ if ($wbShimAvailable) {
     $shimState2 = Join-Path $OutputDir 'shim-state-node-large'
     New-Item -ItemType Directory -Force -Path $shimState2 | Out-Null
     New-Item -ItemType Directory -Force -Path (Split-Path $shimReport2) | Out-Null
-    if (Test-Path $shimReport2) { mavis-trash $shimReport2 }
+    if (Test-Path $shimReport2) { Remove-Owned $shimReport2 }
     Set-WorkbuddyShimEnv -WbPath $WorkbuddyInstall -StateDir $shimState2 -ReportPath $shimReport2
     & node (Join-Path $PSScriptRoot 'repro-node-delete.mjs') shim large $nodeDeleteLarge 2>&1 | ForEach-Object { Log "PHASE1D $_" }
     if (Test-Path $shimReport2) { Get-Content $shimReport2 | ForEach-Object { Log "PHASE1D_SHIM_REPORT $_" } }
@@ -180,7 +183,7 @@ if ($wbShimAvailable) {
     $env:NODE_OPTIONS = ''
     Push-Location $npmProbe
     try {
-        if (Test-Path (Join-Path $npmProbe 'node_modules')) { mavis-trash (Join-Path $npmProbe 'node_modules') }
+        if (Test-Path (Join-Path $npmProbe 'node_modules')) { Remove-Owned (Join-Path $npmProbe 'node_modules') }
         $prevEAP = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
         & npm.cmd install --no-audit --no-fund 2>&1 | Out-Null
@@ -215,7 +218,7 @@ if ($wbShimAvailable) {
     $shimState3 = Join-Path $OutputDir 'shim-state-git'
     New-Item -ItemType Directory -Force -Path $shimState3 | Out-Null
     New-Item -ItemType Directory -Force -Path (Split-Path $shimReport3) | Out-Null
-    if (Test-Path $shimReport3) { mavis-trash $shimReport3 }
+    if (Test-Path $shimReport3) { Remove-Owned $shimReport3 }
     Set-WorkbuddyShimEnv -WbPath $WorkbuddyInstall -StateDir $shimState3 -ReportPath $shimReport3
     & (Join-Path $PSScriptRoot 'build-git-probe.ps1') -Repo $gitProbeShim 2>&1 | ForEach-Object { Log "PHASE3B_BUILD $_" }
     & (Join-Path $PSScriptRoot 'run-git-cycles.ps1') -Repo $gitProbeShim -Cycles $Cycles -OutputFile $gitOutShim -Merge $true 2>&1 | ForEach-Object { Log "PHASE3B_CYCLES $_" }

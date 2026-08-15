@@ -141,7 +141,13 @@ The specific component cause of Bug B.
 - STATUS = CONFIRMED
 - CONFIDENCE = CONFIRMED
 - PRIMARY_EVIDENCE = `report/tsbx_rules.original.json`; `report/sanitized-evidence.md §C`
-- SHA256 = `30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A`
+- HASH PROVENANCE (REPAIR-6):
+  `ORIGINAL_LOCAL_SHA256 = 30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A`
+  (raw shipped bytes, verified 2026-08-15);
+  `PUBLIC_SANITIZED_TSBX_SHA256 = 121c8e05805f6fec831a737dbe71c00d471dd85196b55cd89df94cb3bf68f8f2`
+  (committed `report/tsbx_rules.original.json`, byte-pinned via
+  `.gitattributes -text`). `PUBLIC_COPY_BYTE_IDENTICAL_TO_ORIGINAL = NO`
+  (companion-app install paths redacted to `<OPENCLAW_INSTALL>`).
 
 ### CLAIM REV-01
 The R2 evidence pack is independently reviewable.

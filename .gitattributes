@@ -1,0 +1,4 @@
+# Pin the sanitized tsbx rules backup to byte-for-byte checkout so its
+# documented SHA256 (see report/ENVIRONMENT-MODEL.md §3 provenance block)
+# is deterministic regardless of core.autocrlf settings.
+report/tsbx_rules.original.json -text

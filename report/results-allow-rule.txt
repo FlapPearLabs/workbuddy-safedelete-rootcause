@@ -22,11 +22,18 @@
 # What was prepared (see ../bin/ for the scripts):
 # 1. Original tsbx_rules.json backed up at:
 #      ../report/tsbx_rules.original.json
-#    sha256: 30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A
+#    ORIGINAL_LOCAL_SHA256 (raw shipped bytes, verified 2026-08-15):
+#      30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A
+#    PUBLIC_SANITIZED_TSBX_SHA256 (committed copy, NOT byte-identical):
+#      121c8e05805f6fec831a737dbe71c00d471dd85196b55cd89df94cb3bf68f8f2
+#    See report/ENVIRONMENT-MODEL.md §3 for the full provenance block.
 # 2. The proposed rule (added to file_rules_user):
 #      { "path": "<WORKSPACE>\\**", "type": "inherit_user" }
-# 3. The Git probe is generated at runtime by bin/build-git-probe.ps1
-#    (60 tracked files on master, 46 modified / 5 deleted / 16 added / 4 renamed on feature).
+# 3. The authoritative Bug B native probe is generated at runtime by
+#    bin/build-git-probe-f1-shape.ps1 (160 tracked / 60 test-like /
+#    3-path FF delta / checkpoints A/B/C/D). bin/build-git-probe.ps1
+#    (60 tracked files, 46 modified / 5 deleted / 16 added / 4 renamed) is
+#    HISTORICAL / AUXILIARY only — see report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md.
 #
 # Why not auto-executed:
 #   Applying the proposed narrow rule to the live tsbx_rules.json would require

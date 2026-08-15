@@ -15,8 +15,27 @@ remain healthy (worktree-only loss). The specific component is **unresolved**.
 - Version observed: 5.3.11 / 5.3.13
 - Suspected component: `tsbx.dll` kernel minifilter loaded by `sandbox-cli.exe`
   (HIGH_CONFIDENCE_HYPOTHESIS — not directly observed denying an operation)
-- `tsbx_rules.json` (sha256 `30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A`):
-  `default_action: deny_write`, `recyclebin_backup: true`, **no** `<WORKSPACE>\**` allow rule
+- `tsbx_rules.json`: `default_action: deny_write`, `recyclebin_backup: true`,
+  **no** `<WORKSPACE>\**` allow rule. Hash provenance (see
+  `report/ENVIRONMENT-MODEL.md` §3):
+  `ORIGINAL_LOCAL_SHA256 = 30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A`
+  (raw shipped bytes, verified 2026-08-15);
+  `PUBLIC_SANITIZED_TSBX_SHA256 = 121c8e05805f6fec831a737dbe71c00d471dd85196b55cd89df94cb3bf68f8f2`
+  (committed `report/tsbx_rules.original.json`; byte-pinned via `.gitattributes -text`).
+  The published copy is NOT byte-identical to the original (companion-app
+  install paths redacted to `<OPENCLAW_INSTALL>` placeholders).
+
+## AUTHORITATIVE REPRO HARNESS
+The successful R1 reproduction and the R2 four-checkpoint controlled run
+both used **`bin/build-git-probe-f1-shape.ps1`** (160 tracked files /
+60 test-like / tiny 3-path FF delta: 2 modified + 1 added, 0 deleted,
+with physical checkpoints A/B/C/D). This is the authoritative Bug B native
+harness; use it for any vendor-side reproduction
+(see `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`).
+`bin/build-git-probe.ps1` (60 files, 46 modified / 5 deleted / 16 added /
+4 renamed) is **HISTORICAL / AUXILIARY STRESS PROBE** only — it is the
+negative-control fixture for the Bug A Git A/B phases and is NOT the Bug B
+reproduction shape.
 
 ## ENVIRONMENT
 | Item | Value |

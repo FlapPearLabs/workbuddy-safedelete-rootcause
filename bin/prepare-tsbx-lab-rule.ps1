@@ -15,7 +15,12 @@
 #     signal; do NOT run any Git probe in this phase
 #
 # Usage:
-#   .\prepare-tsbx-lab-rule.ps1 -LabRoot <path> [-WorkbuddyInstall D:\WORKBUDDY]
+#   .\prepare-tsbx-lab-rule.ps1 -LabRoot <path> [-WorkbuddyInstall <path>]
+#   .\prepare-tsbx-lab-rule.ps1 -LabRoot <path> -RulesPath <synthetic-copy>   # deterministic test override
+#
+# -RulesPath: operate on a synthetic copy of tsbx_rules.json instead of the
+# live WorkBuddy install file. Used ONLY by deterministic tests on TEMP
+# fixtures; never point it at the live install file.
 #
 # Outputs (lines for the orchestrator to grep):
 #   TSBX_RULES_PRE_EDIT_SHA256=<sha>
@@ -33,26 +38,32 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][string]$LabRoot,
-    [string]$WorkbuddyInstall = ''
+    [string]$WorkbuddyInstall = '',
+    [string]$RulesPath = ''
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '_lib.ps1')
 
-if (-not $WorkbuddyInstall) {
-    $WorkbuddyInstall = Resolve-WorkbuddyInstallPath
-    if (-not $WorkbuddyInstall) { throw "WorkBuddy install not found" }
-}
-
-$rulesPath = Join-Path $WorkbuddyInstall 'resources\app.asar.unpacked\cli\vendor\sandbox\5.3.3\tsbx_rules.json'
-if (-not (Test-Path $rulesPath)) {
-    # Older installs may live at a different minor version.
-    $candidates = Get-ChildItem (Join-Path $WorkbuddyInstall 'resources\app.asar.unpacked\cli\vendor\sandbox') -Directory -ErrorAction SilentlyContinue
-    if ($candidates) {
-        $alt = $candidates | Where-Object { Test-Path (Join-Path $_.FullName 'tsbx_rules.json') } | Select-Object -First 1
-        if ($alt) { $rulesPath = Join-Path $alt.FullName 'tsbx_rules.json' }
+if ($RulesPath) {
+    # Deterministic test override: operate only on a synthetic copy.
+    if (-not (Test-Path $RulesPath)) { throw "prepare-tsbx-lab-rule: -RulesPath not found: $RulesPath" }
+    $rulesPath = [System.IO.Path]::GetFullPath($RulesPath)
+} else {
+    if (-not $WorkbuddyInstall) {
+        $WorkbuddyInstall = Resolve-WorkbuddyInstallPath
+        if (-not $WorkbuddyInstall) { throw "WorkBuddy install not found" }
     }
+    $rulesPath = Join-Path $WorkbuddyInstall 'resources\app.asar.unpacked\cli\vendor\sandbox\5.3.3\tsbx_rules.json'
+    if (-not (Test-Path $rulesPath)) {
+        # Older installs may live at a different minor version.
+        $candidates = Get-ChildItem (Join-Path $WorkbuddyInstall 'resources\app.asar.unpacked\cli\vendor\sandbox') -Directory -ErrorAction SilentlyContinue
+        if ($candidates) {
+            $alt = $candidates | Where-Object { Test-Path (Join-Path $_.FullName 'tsbx_rules.json') } | Select-Object -First 1
+            if ($alt) { $rulesPath = Join-Path $alt.FullName 'tsbx_rules.json' }
+        }
+    }
+    if (-not (Test-Path $rulesPath)) { throw "tsbx_rules.json not found under $WorkbuddyInstall" }
 }
-if (-not (Test-Path $rulesPath)) { throw "tsbx_rules.json not found under $WorkbuddyInstall" }
 
 # Backup dir is OUTSIDE the WorkBuddy install (per spec).
 $backupDir = Join-Path $LabRoot 'work\tsbx-backup'
@@ -133,21 +144,38 @@ if (!found) {
     process.exit(15);
 }
 
-// Atomic replace on the same volume.
-fs.renameSync(stagingPath, targetPath);
+// Atomic replace on the same volume; cross-volume fallback (copy +
+// verify + remove) so the tooling also works when the lab and the
+// WorkBuddy install are on different drives.
+try {
+    fs.renameSync(stagingPath, targetPath);
+} catch (e) {
+    fs.copyFileSync(stagingPath, targetPath);
+    const a = fs.readFileSync(stagingPath);
+    const b = fs.readFileSync(targetPath);
+    if (!a.equals(b)) {
+        try { fs.unlinkSync(targetPath); } catch (e2) {}
+        console.error('COPY_VERIFY_FAILED');
+        process.exit(16);
+    }
+    fs.unlinkSync(stagingPath);
+}
 console.log('STAGED_OK');
 "@
 
-# Save the helper alongside the script (not into the WorkBuddy install).
-$nodeHelperPath = Join-Path $PSScriptRoot '_prepare-tsbx-lab-rule.cjs'
+# Staging dir is the lab's work dir (outside the WorkBuddy install).
+$stagingDir = Join-Path $LabRoot 'work\tsbx-staging'
+New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
+# The node helper is written into the staging dir (NOT into bin/ and NOT into
+# the WorkBuddy install) so it can be removed through the scoped owned-path
+# helper and never ships.
+$script:TsbxOwnedRoots = @($backupDir, $stagingDir)
+$nodeHelperPath = Join-Path $stagingDir '_prepare-tsbx-lab-rule.cjs'
 "" | Set-Content $nodeHelperPath -Encoding UTF8
 $nodeScript | Add-Content $nodeHelperPath -Encoding UTF8
 
-# Staging dir is the lab's work dir (outside WorkBuddy install).
-$stagingDir = Join-Path $LabRoot 'work\tsbx-staging'
-New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
 $stagingPath = Join-Path $stagingDir ("tsbx_rules.staged." + $stamp + ".json")
-if (Test-Path $stagingPath) { mavis-trash $stagingPath }
+if (Test-Path $stagingPath) { Remove-OwnedProbePath -Path $stagingPath -OwnedRoots $script:TsbxOwnedRoots }
 
 $nodeBin = (Get-Command node -ErrorAction SilentlyContinue).Source
 if (-not $nodeBin) { throw "node not found on PATH" }
@@ -160,8 +188,8 @@ $ErrorActionPreference = $prevEAP
 if ($nodeExit -ne 0) {
     # Roll back: restore the original bytes.
     [System.IO.File]::WriteAllBytes($rulesPath, $origBytes)
-    mavis-trash $nodeHelperPath
-    if (Test-Path $stagingPath) { mavis-trash $stagingPath }
+    Remove-OwnedProbePath -Path $nodeHelperPath -OwnedRoots $script:TsbxOwnedRoots
+    if (Test-Path $stagingPath) { Remove-OwnedProbePath -Path $stagingPath -OwnedRoots $script:TsbxOwnedRoots }
     throw "prepare-tsbx-lab-rule: node helper failed (exit=$nodeExit): $nodeOut. Live file restored from in-memory original bytes."
 }
 
@@ -174,6 +202,6 @@ Write-Output "TSBX_RULES_RULE_PREPARED_RESTART_REQUIRED=YES"
 Write-Output "TSBX_RULES_PHASE2A_OK=YES"
 
 # Clean up helper and staging file (the staged file was already moved
-# atomically into place; mavis-trash the helper so it doesn't ship).
-mavis-trash $nodeHelperPath
-if (Test-Path $stagingPath) { mavis-trash $stagingPath }
+# atomically into place; remove the helper so it doesn't ship).
+Remove-OwnedProbePath -Path $nodeHelperPath -OwnedRoots $script:TsbxOwnedRoots
+if (Test-Path $stagingPath) { Remove-OwnedProbePath -Path $stagingPath -OwnedRoots $script:TsbxOwnedRoots }
