@@ -42,7 +42,7 @@ The two issues have **different root-cause layers** (Node shim + bulk-guard for 
 "recyclebin_backup": true,
 "auto_grant": true
 ```
-There is **no allow-list rule for `D:\Dev\**`** — anything in that tree falls under the deny-by-default policy.
+There is **no allow-list rule for `<WORKSPACE>\**`** — anything in that tree falls under the deny-by-default policy.
 
 ---
 
@@ -148,7 +148,7 @@ The complete, copy-pasteable procedure for running the Git probe from inside a r
 The lab probe rules out the Node shim as the cause. The remaining candidate is the kernel filter. The kernel filter is the only mechanism consistent with all observed facts:
 
 - `tsbx.dll` is currently loaded by `sandbox-cli.exe` (PID observed during investigation).
-- `tsbx_rules.json` has `default_action: "deny_write"` + `recyclebin_backup: true` + no allow-rule for `D:\Dev\**`.
+- `tsbx_rules.json` has `default_action: "deny_write"` + `recyclebin_backup: true` + no allow-rule for `<WORKSPACE>\**`.
 - The user has never observed the anomaly when running git from a non-WorkBuddy shell.
 - The observed `git status` output (` D` lines, `git fsck` clean) is consistent with partial-mutation of the worktree.
 
@@ -245,12 +245,12 @@ All probe fixtures and runtime state are gitignored; the lab rebuilds them on ev
   - The shim wraps `fs.unlinkSync` / `fs.rmSync` (and 4 other entry points) when `CODEBUDDY_SESSION_ID` is set.
   - The bulk-guard default threshold is 20 and the error string is `SAFE_DELETE_BULK_CONFIRM_REQUIRED` with `count`, `threshold`, `scope`, `targets`, `targetCount`.
   - `npm ci` exits 1 under the shim and `.package-lock.json` is trashed by the shim before the bulk-guard fires (smoking gun: the shim report capture in `report/results-latest.txt`).
-  - `tsbx_rules.json` has `default_action: "deny_write"`, `recyclebin_backup: true`, `auto_grant: true`, and no allow-rule for `D:\Dev\**`.
+  - `tsbx_rules.json` has `default_action: "deny_write"`, `recyclebin_backup: true`, `auto_grant: true`, and no allow-rule for `<WORKSPACE>\**`.
   - The `tsbx.dll` rule type vocabulary contains `no_access | read_only | pinned_allow | inherit_user | trust | create_only | auto_grant | modify_backup | unknown | default`.
   - The `npm ci` failure mode is observed in the user's audit log (`file-safety.bulk-delete.needs-approval` events).
 
 - `HIGH_CONFIDENCE_INFERENCE` (not yet directly observed in the lab):
-  - The worktree file loss is caused by the kernel filter (loaded by `sandbox-cli` into WorkBuddy-spawned children) denying write/delete operations on `D:\Dev\**`.
+  - The worktree file loss is caused by the kernel filter (loaded by `sandbox-cli` into WorkBuddy-spawned children) denying write/delete operations on `<WORKSPACE>\**`.
   - The empirical mechanism: a minifilter at `IRP_MJ_SET_INFORMATION` denies the unlink of the old worktree files while permitting the create of the new ones, leaving the worktree in a partial state.
   - The denial may be routed to the OS recycle bin per `recyclebin_backup: true`; this is **not** directly observed in this round.
 

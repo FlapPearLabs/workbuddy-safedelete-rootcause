@@ -46,8 +46,8 @@ workbuddy-rootcause-lab/
 ## How to reproduce
 
 ```powershell
-git clone https://github.com/FlapPearLabs/workbuddy-rootcause-lab D:\Dev\workbuddy-rootcause-lab
-cd D:\Dev\workbuddy-rootcause-lab
+git clone https://github.com/FlapPearLabs/workbuddy-rootcause-lab <WORKSPACE>
+cd <WORKSPACE>
 powershell -ExecutionPolicy Bypass -File .\bin\repro-all.ps1
 ```
 
@@ -56,7 +56,7 @@ within the cloned repo root and the OS temp directory.
 
 ## What this lab does NOT do
 
-- It does **not** modify the real production repo at `D:\Dev\zhihu-grabber-toolkit\`.
+- It does **not** modify the real production repo at `<PROD_REPO>`.
   The lab scripts hard-blacklist that path at the script level.
 - It does **not** modify `tsbx_rules.json` on the live system.
 - It does **not** restart WorkBuddy.

@@ -10,14 +10,18 @@ observed in a Windows dev environment running WorkBuddy (Tencent) 5.3.11:
   by the lab probe proves partial mutation: `.package-lock.json` is silently
   trashed **before** the bulk-guard fires on the bigger batch.
 - **Issue B** — tracked Git worktree files disappear after `git switch` /
-  `git merge` while HEAD / index / blob remain intact. The lab probe
+  `git merge` while HEAD / index / blob remain intact. The Mavis lab probe
   conclusively rules out the Node shim as the cause (11/11 per-step
   `WORKTREE_CHECK_VERDICT=CLEAN` in both NORMAL and SHIM-ONLY modes with
   a real branch delta). The remaining candidate is the `tsbx.dll` kernel
   filter, which is only loaded into processes spawned by `sandbox-cli.exe`
-  inside a real WorkBuddy session. The lab probe cannot reproduce Issue B
-  from a non-WorkBuddy shell. The verification procedure is in
-  `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`.
+  inside a real WorkBuddy session. **A native WorkBuddy run (R1) reproduced
+  the worktree-only loss (59 unrelated tracked files)**; a follow-up
+  controlled four-checkpoint run (R2) was clean in that one shot, so the
+  anomaly is **intermittent across observed native runs** with the component
+  cause still unresolved. Full native evidence and confidence boundaries are
+  in [`report/EXECUTIVE-SUMMARY.md`](report/EXECUTIVE-SUMMARY.md) and
+  [`report/BUG-B-GIT-WORKTREE-LOSS.md`](report/BUG-B-GIT-WORKTREE-LOSS.md).
 
 ## Quick repro (30 seconds for Issue A)
 
@@ -55,9 +59,13 @@ PHASE4_RESULT=NOT_EXECUTED_REQUIRES_WORKBUDDY_PARENT
 | `ISSUE_A_NPM_CI` | NORMAL_EXIT=0 | WORKBUDDY_SHIM_EXIT=1, BULK_GUARD_TRIGGERED=YES |
 | `ISSUE_B_GIT_NORMAL` | LOSS=NO (11/11 CLEAN) | |
 | `ISSUE_B_GIT_SHIM_ONLY` | LOSS=NO (11/11 CLEAN) | |
-| `ISSUE_B_GIT_FULL_SANDBOX` | **REQUIRES_NATIVE_WORKBUDDY_EXPERIMENT** | see `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md` |
+| `ISSUE_B_GIT_FULL_SANDBOX` | **R1 REPRODUCED** (59-file worktree-only loss) | **R2 one-shot CLEAN** (intermittent; `GIT_COMPONENT_CAUSE=UNRESOLVED`) |
 
 ## Where to start (read in this order)
+
+> Start with [`report/EXECUTIVE-SUMMARY.md`](report/EXECUTIVE-SUMMARY.md) for
+> the two-bug overview and confidence boundaries, then the master reconciliation
+> in [`report/MASTER-INVESTIGATION-LEDGER.md`](report/MASTER-INVESTIGATION-LEDGER.md).
 
 1. **[`report/BUG-REPORT-TENCENT.md`](report/BUG-REPORT-TENCENT.md)** — the
    submission-ready bug report (5-minute read, 30-second Issue A repro,
@@ -141,10 +149,10 @@ Runtime-built probe fixtures (in `fixtures/`, also gitignored):
   The lab scripts hard-blacklist the real production repo path.
 - **No Windows user-profile paths.** All `C:\Users\<user>\` references
   in this repo's documents are replaced with `<USER_PROFILE>`.
-- **No `D:\Dev\workbuddy-rootcause-lab\` paths** in this repo's documents.
+- **No `<WORKSPACE>\` paths** in this repo's documents.
   The lab root is replaced with `<WORKSPACE>` (the actual path is
   auto-resolved by `bin/_lib.ps1` from the script's own location).
-- **No `C:\openclaw\openclaw\**` paths** in the published
+- **No `<WORKBUDDY_INSTALL>\openclaw\**` paths** in the published
   `tsbx_rules.original.json`. The WorkBuddy companion app paths are
   redacted to a `_comment` saying "path redacted in published copy".
 - **No force-rewriting of Git history.** The prior commits contained
@@ -165,8 +173,10 @@ product-level philosophy (deny-by-default + 20-default threshold):
   `safe-delete` team). Concrete, repro'd in the lab, has a 30-second
   repro.
 - **Bug B** — `tsbx` kernel sandbox (owner: WorkBuddy `sandbox` team).
-  Strong inference, requires native WorkBuddy execution to confirm;
-  procedure in `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`.
+  Phenomenon confirmed by native R1 reproduction + 5+ real-world events;
+  component cause unresolved; stand-alone report in
+  `report/BUG-B-GIT-WORKTREE-LOSS.md`, future diagnostics in
+  `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`.
 
 An umbrella bug that links both is acceptable if the team prefers a
 single routing ID, but the two issues should be tracked as distinct
@@ -179,12 +189,14 @@ sub-issues so each owner can address their own layer.
   precedes the abort is. Workaround is straightforward: run `npm ci`
   from a non-WorkBuddy shell. Impact is on dev workflow, not on
   production data.
-- **Bug B: MEDIUM, with HIGH_CONFIDENCE_INFERENCE of a kernel-filter
-  cause.** The user's audit log shows 5+ events across 4 days. Severity
-  should be re-evaluated after the native WorkBuddy experiment in
-  `NEXT-WORKBUDDY-GIT-EXPERIMENT.md` confirms the component-level
-  cause. If ETW / ProcMon captures the kernel-filter denials, severity
-  can be upgraded to **HIGH** based on direct evidence.
+- **Bug B: MEDIUM, with VERY_HIGH runtime association and an UNRESOLVED
+  component cause.** Real-world audit log shows 5+ events across 4 days; a
+  native WorkBuddy run (R1) reproduced the worktree-only loss (59 files),
+  and a controlled R2 four-checkpoint run was clean in that one shot —
+  i.e. intermittent across observed native runs, component cause still
+  open (`GIT_COMPONENT_CAUSE=UNRESOLVED`, `TSBX_FILTER_CAUSE=HIGH_CONFIDENCE_HYPOTHESIS`).
+  Severity can be upgraded to **HIGH** if ETW / ProcMon captures the
+  kernel-filter denials directly (FUTURE_DIAGNOSTIC_IF_VENDOR_REQUESTS).
 
 ## Layering summary (Experiment 8)
 

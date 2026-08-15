@@ -1,10 +1,33 @@
 ﻿# ROOT CAUSE CLOSURE REPORT
 
-**Date:** 2026-08-13
-**Investigator:** Mavis (mavis orchestrator, MiniMax Code)
+**Date:** 2026-08-13 (original Mavis-authored closure)
+**Last consolidated:** 2026-08-15 (post native R1/R2 reproduction + independent review PASS)
+**Investigator:** Mavis (mavis orchestrator, MiniMax Code) — original findings;
+WorkBuddy-native R1/R2 reproduction added 2026-08-14 → 2026-08-15
 **Subject:** WorkBuddy safe-delete / sandbox interference with `npm ci` and Git worktree file loss
 **Repository:** https://github.com/FlapPearLabs/workbuddy-safedelete-rootcause
 **Companion document:** `BUG-REPORT-TENCENT.md` (the submission-ready file)
+
+> The current two-bug overview and confidence boundaries are in
+> `report/EXECUTIVE-SUMMARY.md`; the native R1/R2 evidence is in
+> `report/BUG-B-GIT-WORKTREE-LOSS.md`. This file preserves the original Mavis
+> closure analysis and adds the native WorkBuddy reproduction (R1) and the
+> controlled four-checkpoint rerun (R2), with Bug B reclassified from
+> `PENDING_NATIVE_WORKBUDDY_EXECUTION` to `PHENOMENON_CONFIRMED` /
+> `COMPONENT_UNRESOLVED`.
+
+---
+
+## Final classification (this report)
+
+| Bug | Product cause | Component cause | Status |
+|---|---|---|---|
+| **Bug A — npm ci safe-delete** | CONFIRMED | CONFIRMED (`genie-safe-delete.cjs` + `safe-delete-bulk-guard.cjs`) | Closed at component level |
+| **Bug B — Git worktree loss** | CONFIRMED (phenomenon) | **UNRESOLVED** | Phenomenon confirmed; component open |
+
+Do **not** call Bug B fully root-cause-confirmed. Do **not** state that R1/R2
+proves a race. The correct phrasing: *"The anomaly is intermittent across the
+observed native runs. The source of run-to-run variability remains unresolved."*
 
 ---
 
@@ -65,6 +88,8 @@ subsequent test failures that look like missing dependencies.
 mechanism verified via source code line numbers and string evidence;
 user-side audit log independently confirms the same error class.
 
+→ Standalone vendor report: `report/BUG-A-NPM-SAFE-DELETE.md`
+
 ---
 
 ## ISSUE B — Git worktree file loss
@@ -73,25 +98,39 @@ user-side audit log independently confirms the same error class.
 
 - **REPRODUCED in the user's environment** (5+ distinct events in the audit
   log between 2026-08-10 and 2026-08-13).
-- **NOT REPRODUCED in the lab probe** because the kernel filter (`tsbx.dll`)
-  is only loaded into processes spawned by WorkBuddy's `sandbox-cli`. From
-  a Mavis shell, `git.exe` is not a WorkBuddy child and the kernel filter
-  does not apply.
+- **Reproduced in a native WorkBuddy synthetic probe (R1, 2026-08-14).** A
+  F1-shape disposable git repo (160 tracked files, 3-path delta) run **inside**
+  the real WorkBuddy execution chain (ancestry to `sandbox-cli.exe`) reproduced
+  `WORKTREE_ONLY_LOSS`: 59 unrelated tracked files physically absent while
+  HEAD / index / blob / fsck / remote stayed intact.
+- **Controlled R2 rerun (2026-08-15) was clean.** A four-checkpoint harness
+  (A after commit-A, B after `git checkout -b`, C after commit-B + shape
+  assertion, D after final `git checkout master`) recorded CLEAN / missing 0 at
+  every checkpoint; loss was **not** reproduced in that one controlled run.
+  Combined with R1, the anomaly is **intermittent across observed native runs**
+  (`INTERMITTENT_ACROSS_OBSERVED_NATIVE_RUNS = YES`).
+- **NOT REPRODUCED from a Mavis / non-WorkBuddy shell** — the kernel filter
+  (`tsbx.dll`) is only loaded into processes spawned by `sandbox-cli.exe`.
 
-| | NORMAL | WORKBUDDY SHIM-ONLY (env + `NODE_OPTIONS=--require=...`) | WORKBUDDY FULL (kernel filter) |
+| | NORMAL | WORKBUDDY SHIM-ONLY (env + `NODE_OPTIONS=--require=...`) | WORKBUDDY NATIVE (kernel filter) |
 |---|---|---|---|
-| Lab probe outcome | 11/11 `WORKTREE_CHECK_VERDICT=CLEAN` | 11/11 `WORKTREE_CHECK_VERDICT=CLEAN` | **PENDING_NATIVE_WORKBUDDY_EXECUTION** |
+| Non-WorkBuddy shell probe | 11/11 `WORKTREE_CHECK_VERDICT=CLEAN` | 11/11 `WORKTREE_CHECK_VERDICT=CLEAN` | n/a (filter not active) |
+| Native WorkBuddy R1 | — | — | **REPRODUCED** (59-file worktree-only loss) |
+| Native WorkBuddy R2 (controlled) | — | — | **CLEAN** at all 4 checkpoints (loss not reproduced this run) |
 | User-side observation | never observed | never observed | 5+ events in audit log |
 
-**The lab probe conclusively rules out the Node shim as the cause of Issue B.**
-The shim is a per-Node-process patch; it does not touch `git.exe`. The only
-remaining mechanism consistent with the observed pattern is the kernel filter.
+**The lab probe conclusively rules out the Node shim as the cause of Issue B**
+(FALSIFIED by the SHIM-ONLY control). The shim is a per-Node-process patch; it
+does not touch `git.exe`. A native WorkBuddy run reproduced the loss, so the
+cause is specific to the WorkBuddy-native execution chain; the only remaining
+mechanism consistent with all observed facts is the `tsbx.dll` kernel filter,
+but it has **not** been directly observed denying a specific operation.
 
 ### B.2 Product-level cause
 
 The WorkBuddy kernel sandbox (loaded by `sandbox-cli.exe` into all child
 processes) applies a `deny_write` default policy to anything not in the
-allow-list, and `D:\Dev\**` is not in the allow-list. When WorkBuddy
+allow-list, and `<WORKSPACE>\**` is not in the allow-list. When WorkBuddy
 spawns `git.exe` as a child to perform `git switch` or `git merge`, the
 kernel filter intercepts the worktree file operations. The new file
 writes (create) are allowed or denied inconsistently with the old file
@@ -100,41 +139,48 @@ git does not consider valid (it shows ` D` lines). Because the user has
 no view of the kernel filter's denials (no log, no error), the loss
 appears to come from nowhere.
 
-### B.3 Component-level cause (inferred)
+This is the **HIGH_CONFIDENCE_HYPOTHESIS** for the product-level cause. It is
+the only mechanism consistent with all observed facts after Defender / SSD /
+NTFS / Defender-quarantine were ruled out, and after the Node shim was
+falsified by the SHIM-ONLY control. It has **not** been directly observed
+denying a specific operation.
 
-- `tsbx_rules.json` (sha256 `30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A`)
-  has `default_action: "deny_write"` + `recyclebin_backup: true` + no
-  allow-rule for `D:\Dev\**`.
-- `tsbx.dll` is a Windows file system minifilter, loaded by
-  `sandbox-cli.exe`. The kernel filter applies to all file operations of
-  processes that WorkBuddy spawns.
-- **The empirical test of this hypothesis requires running git from
-  within a real WorkBuddy tool-call.** The lab probe from Mavis does
-  not load the kernel filter, so the worktree anomaly is not
-  reproducible from the lab alone. The procedure is in
-  `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`.
+### B.3 Component-level cause (UNRESOLVED)
+
+- `GIT_COMPONENT_CAUSE = UNRESOLVED`. The specific component that performs the
+  worktree mutation is not directly observed. Candidates, in order of fit:
+  1. `tsbx.dll` kernel minifilter applied to all file operations of processes
+     spawned by `sandbox-cli.exe` (HIGH_CONFIDENCE_HYPOTHESIS).
+  2. `ModifyBackup` IPC / recycle-bin routing (`tsbx_rules.json` references
+     `recyclebin_backup: true`; `modify_backup` field referenced in the binary
+     but not in the current rules file).
+- The empirical test of the tsbx hypothesis requires running git from within a
+  real WorkBuddy tool-call — which R1 did, reproducing the loss, but R2 (a
+  controlled one-shot rerun) was clean. The run-to-run variability is the open
+  question.
 
 ### B.4 Causal confidence
 
-- `SANDBOX_POLICY_CAUSE`: **HIGH_CONFIDENCE_INFERENCE** until Phase 1 of
-  `NEXT-WORKBUDDY-GIT-EXPERIMENT.md` is executed.
-- `COMPONENT_LEVEL_CAUSE`: **HIGH_CONFIDENCE_INFERENCE** until ETW /
-  ProcMon evidence (Phase 3) is captured.
+- `WORKBUDDY_RUNTIME_ASSOCIATION`: **VERY_HIGH** — loss occurs only inside the
+  WorkBuddy-native execution chain; never from a non-WorkBuddy shell.
+- `GIT_COMPONENT_CAUSE` (which specific component performs the mutation):
+  **UNRESOLVED** — no direct component-level evidence; native R1 reproduced but
+  R2 one-shot was clean, so the source of run-to-run variability is open.
+- `TSBX_FILTER_CAUSE`: **HIGH_CONFIDENCE_HYPOTHESIS** — the `tsbx.dll` kernel
+  filter is the only remaining mechanism consistent with all observed facts,
+  but it has not been directly observed denying a specific operation.
+- `SOURCE_OF_RUN_TO_RUN_VARIABILITY`: **UNRESOLVED**.
 
-The kernel-filter hypothesis is the only remaining explanation after
-Defender / SSD / NTFS / Defender-quarantine were ruled out in previous
-rounds, and it is the only mechanism that matches all observed facts:
-- tsbx kernel filter is loaded
-- Rules have `deny_write` default
-- `D:\Dev\**` is not in any allow-list
-- `recyclebin_backup: true` may route denied operations to the recycle bin
-- Worktree file loss is worktree-only (HEAD/index/blob intact) — consistent
-  with partial-mutation
-- No other candidate mechanism has been observed
+Do **not** write "race confirmed", "timing bug confirmed", or "filter-driver
+race confirmed". The anomaly is **intermittent across the observed native runs**;
+the source of run-to-run variability remains unresolved.
+
+→ Standalone vendor report: `report/BUG-B-GIT-WORKTREE-LOSS.md`
+→ F1 real incident: `report/NATURAL-INCIDENT-F1.md`
 
 ---
 
-## Layering summary (Experiment 8)
+## Layering summary (Experiment 8, updated)
 
 The WorkBuddy safe-delete has three distinct layers, each affecting different
 operations:
@@ -143,7 +189,7 @@ operations:
 |---|---|---|---|
 | **Node shim** (`genie-safe-delete.cjs`) | `fs.unlinkSync` / `fs.rmSync` / etc. in Node.js processes with `CODEBUDDY_SESSION_ID` set | All Node processes spawned by WorkBuddy (test code, npm, etc.) | **YES** — direct repro of Issue A; **conclusively rules it out for Issue B** |
 | **Shell shim** (`safe-bin/{rm,rmdir,unlink}`) | `rm` / `rmdir` / `unlink` in shell sessions via `PATH` override | All bash / sh processes spawned by WorkBuddy | NOT TESTED (out of scope for this round) |
-| **Kernel filter** (`tsbx.dll` + `tsbx_rules.json`) | All file system operations at the IRP level for any process whose handle is associated with the filter | All processes spawned by WorkBuddy (git.exe, node.exe, npm.cmd, etc.) | NOT REPRODUCED in Mavis (filter not active); HIGH-CONFIDENCE INFERENCE for Issue B |
+| **Kernel filter** (`tsbx.dll` + `tsbx_rules.json`) | All file system operations at the IRP level for any process whose handle is associated with the filter | All processes spawned by WorkBuddy (git.exe, node.exe, npm.cmd, etc.) | **NATIVE R1 REPRODUCED** the worktree loss; R2 one-shot clean → intermittent; `GIT_COMPONENT_CAUSE=UNRESOLVED`, `TSBX_FILTER_CAUSE=HIGH_CONFIDENCE_HYPOTHESIS` for Issue B |
 
 The Node shim alone is sufficient to cause Issue A. The kernel filter is
 required (and inferred to be sufficient) to cause Issue B. The two issues
@@ -154,21 +200,22 @@ product-level philosophy (deny-by-default + 20-default threshold).
 
 ## A/B result table
 
-| Probe | NORMAL | WORKBUDDY SHIM SIMULATION | WORKBUDDY FULL |
+| Probe | NORMAL | WORKBUDDY SHIM SIMULATION | WORKBUDDY NATIVE (kernel filter) |
 |---|---|---|---|
 | Node fs.rm small (5 files) | native delete, exit 0 | shim silently trashes, exit 0 | n/a (kernel filter not exercised in lab) |
 | Node fs.rm large (40 files) | native delete, exit 0 | shim BLOCKS with `SAFE_DELETE_BULK_CONFIRM_REQUIRED`, exit 1 | n/a |
 | `npm ci` | exit 0, clean, REMOVED=0 | exit 1, `node_modules` half-deleted, shim report confirms `.package-lock.json` trashed before guard fires | n/a |
-| Git worktree cycles (5+1) | TRACKED=60, PHYSICAL=60, MISSING=0, all 11 steps CLEAN | TRACKED=60, PHYSICAL=60, MISSING=0, all 11 steps CLEAN | **PENDING_NATIVE_WORKBUDDY_EXECUTION** |
+| Git worktree cycles (5+1) — Mavis shell | TRACKED=60, PHYSICAL=60, MISSING=0, all 11 steps CLEAN | TRACKED=60, PHYSICAL=60, MISSING=0, all 11 steps CLEAN | n/a (filter not active) |
+| Git worktree — native R1 (F1-shape) | — | — | **REPRODUCED** 59-file `WORKTREE_ONLY_LOSS`, HEAD/index intact |
+| Git worktree — native R2 (4-checkpoint) | — | — | **CLEAN** at A/B/C/D, loss not reproduced this run |
 
 ---
 
 ## Data-loss boundary (corrected)
 
-The user has proposed a 4-class classification of the data-loss boundary.
-The risk for each class depends on the failure mode and on whether the
-user notices in time to recover from the OS recycle bin (per
-`recyclebin_backup: true`).
+The user proposed a 4-class classification of the data-loss boundary. The risk
+for each class depends on the failure mode and on whether the user notices in
+time to recover from the OS recycle bin (per `recyclebin_backup: true`).
 
 | Class | Risk | Notes |
 |---|---|---|
@@ -180,12 +227,11 @@ user notices in time to recover from the OS recycle bin (per
 **Permanent data loss has not been observed in this round.** The risk is
 concentrated in `UNSTAGED_CONTENT` and `UNTRACKED_CONTENT`. We do **not**
 claim that `git restore --worktree` recovers unstaged modifications — it
-does not. The prior unstaged bytes are not stored in HEAD or in the
-index. Before running `git restore --worktree`, check the OS recycle
-bin, the editor / IDE local history, autosave / backup, or any other
-out-of-band copy. `git diff` cannot recover the bytes either, because
-the file is already gone from the worktree.
-does not.
+does not. The prior unstaged bytes are not stored in HEAD or in the index.
+Before running `git restore --worktree`, check the OS recycle bin, the editor
+/ IDE local history, autosave / backup, or any other out-of-band copy. `git
+diff` cannot recover the bytes either, because the file is already gone from
+the worktree.
 
 ---
 
@@ -202,24 +248,25 @@ does not.
 
 ## What Tencent needs to fix
 
-See `BUG-REPORT-TENCENT.md` section "What we recommend Tencent to do" —
-the four concrete items.
+See `BUG-REPORT-TENCENT.md` section "What we recommend Tencent to do" — the
+four concrete items. For Bug B specifically, the remaining work is component-level
+confirmation (see `BUG-B-GIT-WORKTREE-LOSS.md` → "Possible future diagnostics").
 
 ## What remains unknown
 
-- The empirical outcome of Phase 1 of `NEXT-WORKBUDDY-GIT-EXPERIMENT.md`
-  (whether the worktree anomaly reproduces from a real WorkBuddy tool-call).
+- The **component-level cause** of Bug B: which kernel component (`tsbx.dll`
+  filter vs. `ModifyBackup` IPC vs. recycle-bin routing) performs the worktree
+  mutation, and **why it is intermittent** (R1 reproduced, R2 one-shot clean).
 - The exact reload mechanism of `tsbx_rules.json` (hot-reload vs. per-invocation
-  vs. process startup). The procedure pauses for the user to perform a
-  controlled restart in Phase 2.
+  vs. process startup).
 - The exact `inherit_user` rule type semantics. **Inferred** from the field
   name and the binary string vocabulary; product documentation was not
   consulted in this round.
-- The frequency of the worktree anomaly for other WorkBuddy users. Only
-  the user-side audit log is observed; broader telemetry would be needed
-  before claiming impact beyond this single installation.
-- Whether the `modify_backup` field in `tsbx_rules.json` (referenced in
-  the binary but not in the current `tsbx_rules.json`) supersedes
+- The frequency of the worktree anomaly for other WorkBuddy users. Only the
+  user-side audit log is observed; broader telemetry would be needed before
+  claiming impact beyond this single installation.
+- Whether the `modify_backup` field in `tsbx_rules.json` (referenced in the
+  binary but not in the current `tsbx_rules.json`) supersedes
   `recyclebin_backup` and what its semantics are.
 
 ---
@@ -231,14 +278,14 @@ investigation:
 
 - No real production source files (no full file from `<WORKBUDDY_INSTALL>`).
 - No credentials, no API keys, no tokens, no cookies, no passwords.
-- No real production repo paths (`D:\Dev\zhihu-grabber-toolkit` is hard-blacklisted
+- No real production repo paths (`<PROD_REPO>` is hard-blacklisted
   in the lab scripts and is never touched).
 - The user's Windows profile path (`C:\Users\<user>`) is replaced with
   `<USER_PROFILE>` in all published documents.
-- The disposable lab root (`D:\Dev\workbuddy-rootcause-lab`) is replaced with
+- The disposable lab root (`<WORKSPACE>`) is replaced with
   `<WORKSPACE>` in all published documents.
-- The WorkBuddy companion app paths (`C:\openclaw\openclaw\**`,
-  `D:\openclaw\proxy-agent\**`) are redacted in the published copy of
+- The WorkBuddy companion app paths (`<WORKBUDDY_INSTALL>\openclaw\**`,
+  `<WORKBUDDY_INSTALL>\proxy-agent\**`) are redacted in the published copy of
   `tsbx_rules.original.json` to a `_comment` saying "path redacted in
   published copy". The lab's `_redaction_marker` clearly identifies what
   was changed.
@@ -248,6 +295,9 @@ investigation:
   (under 30 lines each).
 - The historical Git metadata may contain the repository author's public
   Git identity (the user is the only author; this is not a secret).
+- The raw native-run logs under `work/native-runs/` are **gitignored** and
+  **not committed**; they are mapped to the sanitized public claims via
+  `work/RAW-EVIDENCE-MANIFEST.md` for future re-verification.
 
 **No force-rewriting of Git history was performed.** The prior commits that
 contained the disposable probe sub-repos as gitlinks have been removed via
@@ -260,85 +310,107 @@ commits forward.
 
 ## Canonical issue architecture
 
-The investigation deliberately splits evidence collection from
-vendor filing. The two repos have different roles:
+The investigation deliberately splits evidence collection from vendor filing.
+The two repos have different roles:
 
-- **`FlapPearLabs/zhihu-grabber-toolkit`** is the production
-  repository where the natural incident was observed. It is
-  **read-only** for the investigation. The natural incident log
-  (issue-style evidence) lives in this repo's issue tracker (or
-  in `report/NATURAL-INCIDENT-F1.md` in the workbuddy repo for
-  now, until the user opens a tracking issue). It contains the
-  user's project evidence only; it does NOT contain the canonical
-  repro, the safe-delete source code excerpts, the tsbx binary
+- **`FlapPearLabs/zhihu-grabber-toolkit`** is the production repository where
+  the natural incident was observed. It is **read-only** for the investigation.
+  The natural incident log (issue-style evidence) lives in this repo's issue
+  tracker (Issue #1) and in `report/NATURAL-INCIDENT-F1.md` in the rootcause
+  repo. It contains the user's project evidence only; it does NOT contain the
+  canonical repro, the safe-delete source code excerpts, the tsbx binary
   strings, or the WorkBuddy-side analysis.
 
-- **`FlapPearLabs/workbuddy-safedelete-rootcause`** (this repo)
-  is the **canonical repro + root cause + vendor report**. It
-  contains:
+- **`FlapPearLabs/workbuddy-safedelete-rootcause`** (this repo) is the
+  **canonical repro + root cause + vendor report**. It contains:
   - the one-click repro bundle (`bin/repro-all.ps1`)
   - the sanitized evidence pack (`report/sanitized-evidence.md`)
   - the natural incident F1 record (`report/NATURAL-INCIDENT-F1.md`)
   - the next-step native procedure (`report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`)
   - the Tencent submission file (`report/BUG-REPORT-TENCENT.md`)
+  - the two standalone vendor reports (`report/BUG-A-NPM-SAFE-DELETE.md`,
+    `report/BUG-B-GIT-WORKTREE-LOSS.md`)
   - the closure summary (this file)
+  - the publication set (`report/EXECUTIVE-SUMMARY.md`,
+    `report/MASTER-INVESTIGATION-LEDGER.md`, `report/SOURCE-COVERAGE-AUDIT.md`,
+    `report/INVESTIGATION-TIMELINE.md`, `report/EVIDENCE-INDEX.md`,
+    `report/INVESTIGATOR-CONTRIBUTIONS.md`, `report/ENVIRONMENT-MODEL.md`,
+    `report/VENDOR-SUBMISSION-CHECKLIST.md`)
 
 ### Final vendor filing: TWO LINKED BUGS
 
-The two issues have different root-cause layers even though they
-share the same product-level philosophy (deny-by-default +
-threshold=20 default). They are recommended to be filed as **two
-linked bugs** so that the WorkBuddy `safe-delete` and `sandbox`
-owners can each be assigned the right issue:
+The two issues have different root-cause layers even though they share the same
+product-level philosophy (deny-by-default + threshold=20 default). They are
+recommended to be filed as **two linked bugs** so that the WorkBuddy
+`safe-delete` and `sandbox` owners can each be assigned the right issue:
 
 - **BUG A — `npm ci` / Node safe-delete bulk guard**
-  - **CONFIRMED** in this repo's disposable lab (1 click, 11 per-step
-    records, partial-mutation smoking gun in `NPM_CI_PHASE2_SHIM_TRASH_EVENT`).
+  - **CONFIRMED** in this repo's disposable lab (1 click, 11 per-step records,
+    partial-mutation smoking gun in `NPM_CI_PHASE2_SHIM_TRASH_EVENT`).
   - **Component-level cause:** `genie-safe-delete.cjs` +
-    `safe-delete-bulk-guard.cjs` (verified by source line numbers
-    and SHA256).
+    `safe-delete-bulk-guard.cjs` (verified by source line numbers and SHA256).
   - **Owner:** WorkBuddy `safe-delete` team.
+  - Stand-alone report: `report/BUG-A-NPM-SAFE-DELETE.md`.
 
 - **BUG B — `git switch` / `git merge` / native WorkBuddy sandbox**
-  - **PENDING_NATIVE_WORKBUDDY_EXECUTION** for component-level
-    confirmation; **HIGH_CONFIDENCE_INFERENCE** for the
-    sandbox-policy cause based on the F1 natural recurrence
-    (3-path merge delta + 18 missing files) and 5+ user-side
-    audit log events.
-  - **Candidate component-level cause:** the `tsbx.dll` kernel
-    filter applied to all file operations of processes spawned
+  - **PHENOMENON_CONFIRMED** by native R1 reproduction (59-file worktree-only
+    loss) + 5+ real-world audit events + F1 natural recurrence (3-path merge
+    delta + 18 missing files).
+  - **WORKBUDDY_RUNTIME_ASSOCIATION = VERY_HIGH**; **COMPONENT_CAUSE =
+    UNRESOLVED** — native R1 reproduced but R2 one-shot was clean
+    (`INTERMITTENT_ACROSS_OBSERVED_NATIVE_RUNS = YES`); the specific component
+    (tsbx filter vs. `ModifyBackup` IPC vs. recycle-bin routing) is not
+    directly observed.
+  - **Candidate component-level cause (HIGH_CONFIDENCE_HYPOTHESIS):** the
+    `tsbx.dll` kernel filter applied to all file operations of processes spawned
     by `sandbox-cli.exe` inside a real WorkBuddy session.
-    Not yet directly observed from a lab probe.
   - **Owner:** WorkBuddy `sandbox` team.
+  - Stand-alone report: `report/BUG-B-GIT-WORKTREE-LOSS.md`.
 
-An umbrella bug that links both is acceptable if Tencent prefers
-a single routing ID, but the two issues should be tracked as
-distinct sub-issues so each owner can address their own layer.
-The closure of BUG B requires the native WorkBuddy Phase 1 / 2A /
-2B / 2C procedure in `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md` to
-be executed from inside a real WorkBuddy tool-call.
+An umbrella bug that links both is acceptable if Tencent prefers a single
+routing ID, but the two issues should be tracked as distinct sub-issues so each
+owner can address their own layer.
+
+BUG B is **closed at the phenomenon level** (reproduced natively, R2 harness
+reviewed and PASS) but **component cause remains open**. The remaining
+diagnostics (narrow sandbox-rule A/B, ETW / ProcMon) are optional and gated as
+`FUTURE_DIAGNOSTIC_IF_VENDOR_REQUESTS` in
+`report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`.
 
 ## Files in this repro bundle
 
 | File | Purpose |
 |---|---|
-| `README.md` | One-click reproduction entry |
+| `README.md` | One-click reproduction entry (updated for native R1/R2) |
 | `bin/repro-all.ps1` | Master orchestrator (5 phases) |
 | `bin/repro-npm-ci.ps1` | npm ci A/B with pre/post file manifest |
 | `bin/repro-node-delete.mjs` | Node fs.rmSync A/B |
 | `bin/probe-shim.cjs` | Verifies the Node shim is loaded in the env |
 | `bin/build-fixture.ps1` | Creates the small/large Node delete fixtures |
 | `bin/build-git-probe.ps1` | Initializes the disposable git repo with real branch delta |
+| `bin/build-git-probe-f1-shape.ps1` | F1-shape native probe (R1/R2 harness) |
 | `bin/check-worktree.ps1` | Verifies tracked file integrity after each git operation |
 | `bin/run-git-cycles.ps1` | Runs N switch cycles + 1 fast-forward merge |
+| `bin/assert-native-workbuddy-context.ps1` | Confirms real WorkBuddy ancestry |
+| `bin/test-outcome-parser.ps1` / `bin/test-attribution-preop.ps1` | Offline harness self-tests |
 | `bin/_lib.ps1` | Shared library (env, paths, manifest, worktree classifier) |
 | `bin/run-as-workbuddy.ps1` | Sets WorkBuddy env vars and invokes a child command (refuses real-project paths) |
 | `npm-probe/package.json` | parse5@8.0.1 + entities@8.0.0 fixture |
 | `npm-probe/package-lock.json` | Committed lockfile (registry.npmjs.org) |
-| `report/BUG-REPORT-TENCENT.md` | Submission-ready bug report (5-min read, 30-sec Issue A repro) |
+| `report/BUG-REPORT-TENCENT.md` | Submission-ready bug report |
+| `report/BUG-A-NPM-SAFE-DELETE.md` | Standalone Bug A vendor report |
+| `report/BUG-B-GIT-WORKTREE-LOSS.md` | Standalone Bug B vendor report |
+| `report/EXECUTIVE-SUMMARY.md` | Two-bug overview + confidence boundaries |
+| `report/MASTER-INVESTIGATION-LEDGER.md` | Master reconciliation of every finding |
+| `report/SOURCE-COVERAGE-AUDIT.md` | Source inventory + coverage reconciliation |
+| `report/INVESTIGATION-TIMELINE.md` | Chronological investigation stages |
+| `report/EVIDENCE-INDEX.md` | Claim-by-claim evidence + confidence |
+| `report/INVESTIGATOR-CONTRIBUTIONS.md` | Provenance: who found what |
+| `report/ENVIRONMENT-MODEL.md` | Environment / version / process model |
+| `report/VENDOR-SUBMISSION-CHECKLIST.md` | Two linked bug packages + channels |
 | `report/ROOT_CAUSE_CLOSURE_REPORT.md` | This file |
 | `report/sanitized-evidence.md` | Full evidence pack with code snippets, shim report, audit log quotes |
-| `report/NATURAL-INCIDENT-F1.md` | Sanitized record of the 2026-08-14 F1 natural recurrence (3-path merge delta, 18 missing test files, sanitized WorkBuddy environment facts) |
+| `report/NATURAL-INCIDENT-F1.md` | Sanitized record of the 2026-08-14 F1 natural recurrence |
 | `report/results-latest.txt` | Full orchestrator output (last lab run) |
 | `report/results-npm-ci.txt` | npm ci A/B structured records |
 | `report/results-git-normal.txt` | Git A/B NORMAL mode records |
@@ -346,4 +418,4 @@ be executed from inside a real WorkBuddy tool-call.
 | `report/environment-summary.txt` | Sanitized environment info |
 | `report/tsbx_rules.original.json` | Unmodified backup of the original rules file (sha256-pinned, paths redacted) |
 | `report/results-allow-rule.txt` | Documented procedure for the allow-rule test (not executed) |
-| `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md` | Complete procedure for native WorkBuddy Phase 1 / 2 / 3 verification |
+| `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md` | Complete procedure for native WorkBuddy diagnostics |

@@ -151,11 +151,11 @@ if (totalCount >= context.threshold) {
         { "path": "%APPDATA%\\Trae\\**",         "type": "inherit_user" },
         { "path": "%APPDATA%\\Microsoft\\Windows\\PowerShell\\**",  "type": "inherit_user" },
         { "path": "%LOCALAPPDATA%\\Microsoft\\Windows\\PowerShell\\**", "type": "inherit_user" },
-        { "path": "C:\\openclaw\\openclaw\\**",         "type": "inherit_user", "_comment": "WorkBuddy companion app (path redacted in published copy)" },
+        { "path": "<WORKBUDDY_INSTALL>\\openclaw\\**",         "type": "inherit_user", "_comment": "WorkBuddy companion app (path redacted in published copy)" },
         { "path": "%USERPROFILE%\\.openclaw\\**",       "type": "inherit_user" }
     ],
     "file_rules_user": [
-        { "path": "D:\\openclaw\\proxy-agent\\**", "type": "inherit_user", "_comment": "WorkBuddy proxy agent (path redacted in published copy)" }
+        { "path": "<WORKBUDDY_INSTALL>\\proxy-agent\\**", "type": "inherit_user", "_comment": "WorkBuddy proxy agent (path redacted in published copy)" }
     ],
     "registry_rules": [],
     "process_rules": [],
@@ -180,7 +180,7 @@ if (totalCount >= context.threshold) {
 }
 ```
 
-`D:\Dev\**` is **not** in any allow-list. With `default_action: deny_write`, all writes (and deletes via `IRP_MJ_SET_INFORMATION`) to `D:\Dev\**` are denied by default. The `recyclebin_backup: true` flag suggests denied operations may be redirected to the OS recycle bin; the empirical confirmation of this routing under the kernel filter has **not** been performed in this round (see section I).
+`<WORKSPACE>\**` is **not** in any allow-list. With `default_action: deny_write`, all writes (and deletes via `IRP_MJ_SET_INFORMATION`) to `<WORKSPACE>\**` are denied by default. The `recyclebin_backup: true` flag suggests denied operations may be redirected to the OS recycle bin; the empirical confirmation of this routing under the kernel filter has **not** been performed in this round (see section I).
 
 ---
 
@@ -409,7 +409,7 @@ A narrow lab rule is **designed but not yet applied to the live system** (would 
 { "path": "<WORKSPACE>\\**", "type": "inherit_user" }
 ```
 
-This rule is **scoped strictly to the disposable lab directory** and is **narrower** than the existing example `D:\openclaw\proxy-agent\**` rule in `file_rules_user`. It does **not** affect the real production repo or any other `D:\Dev\**` path.
+This rule is **scoped strictly to the disposable lab directory** and is **narrower** than the existing example `<WORKBUDDY_INSTALL>\proxy-agent\**` rule in `file_rules_user`. It does **not** affect the real production repo or any other `<WORKSPACE>\**` path.
 
 ---
 

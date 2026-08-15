@@ -313,7 +313,7 @@ calls `bin/prepare-tsbx-lab-rule.ps1`, which:
 10. Atomically renames the staged file over the target (same volume).
 11. Records the new SHA and prints `RULE_PREPARED_RESTART_REQUIRED`.
 
-The live `D:\Dev\**` is **not** affected; the rule is scoped strictly
+The live `<WORKSPACE>\**` is **not** affected; the rule is scoped strictly
 to `<LAB>\**`.
 
 ### 3.1 — Run prepare-tsbx-lab-rule
