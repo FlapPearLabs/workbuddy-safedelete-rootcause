@@ -4,8 +4,8 @@
 > the Node shim (the `genie-safe-delete.cjs` layer) is **not** the cause of
 > the Git worktree file loss observed in the user's audit log. The kernel
 > filter (`tsbx.dll`) is the leading candidate mechanism (HIGH_CONFIDENCE_HYPOTHESIS) consistent with the
-> user-side pattern, but the kernel filter is only loaded into processes
-> spawned by `sandbox-cli.exe` inside a real WorkBuddy session. This
+> user-side pattern, but `tsbx.dll`'s exact attachment/interception behavior
+> was not directly traced. This
 > document is a **complete, copy-pasteable procedure** for running the
 > Git worktree A/B inside a real WorkBuddy tool-call.
 

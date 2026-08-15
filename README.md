@@ -13,9 +13,10 @@ observed in a Windows dev environment running WorkBuddy (Tencent) 5.3.11:
   `git merge` while HEAD / index / blob remain intact. The Mavis lab probe
   conclusively rules out the Node shim as the cause (11/11 per-step
   `WORKTREE_CHECK_VERDICT=CLEAN` in both NORMAL and SHIM-ONLY modes with
-  a real branch delta). The leading candidate (HIGH_CONFIDENCE_HYPOTHESIS) is the `tsbx.dll` kernel
-  filter, which is only loaded into processes spawned by `sandbox-cli.exe`
-  inside a real WorkBuddy session. **A native WorkBuddy run (R1) reproduced
+  a real branch delta). `tsbx.dll` is present in the WorkBuddy sandbox
+  distribution and is a HIGH_CONFIDENCE_HYPOTHESIS for Bug B. Its exact
+  attachment/interception behavior relevant to the Git anomaly was not
+  directly traced. **A native WorkBuddy run (R1) reproduced
   the worktree-only loss (59 unrelated tracked files)**; a follow-up
   controlled four-checkpoint run (R2) was clean in that one shot, so the
   anomaly is **intermittent across observed native runs** with the component
@@ -210,10 +211,14 @@ sub-issues so each owner can address their own layer.
 |---|---|---|---|
 | Node shim (`genie-safe-delete.cjs`) | `fs.unlinkSync` / `fs.rmSync` / etc. in Node processes with `CODEBUDDY_SESSION_ID` set | All Node processes spawned by WorkBuddy (test code, npm itself) | **YES** (Issue A directly reproduced) |
 | Shell shim (`safe-bin/{rm,rmdir,unlink}`) | `rm` / `rmdir` / `unlink` in shell sessions | All bash / sh processes spawned by WorkBuddy | NOT TESTED |
-| Kernel filter (`tsbx.dll` + `tsbx_rules.json`) | All file system operations at the IRP level for any process whose handle is associated with the filter | All processes spawned by WorkBuddy (git.exe, node.exe, npm.cmd, etc.) | NOT REPRODUCED in Mavis; **HIGH_CONFIDENCE_INFERENCE for Issue B** |
+| Candidate native sandbox/filesystem component (`tsbx.dll` + `tsbx_rules.json`) | Observed: artifacts/rules are present in the WorkBuddy sandbox distribution; native R1 reproduced the phenomenon. | Inferred / unresolved: exact process attachment, interception coverage, and causal role. | HIGH_CONFIDENCE_HYPOTHESIS for Bug B; COMPONENT_CAUSE=UNRESOLVED |
 
-Issue A only needs the Node shim to manifest. Issue B is associated with the kernel
-filter (HIGH_CONFIDENCE_HYPOTHESIS — not established as the cause). The two issues must not be conflated: Issue A is component-confirmed (Node shim + 20-delete bulk-guard); Issue B's kernel-filter cause is a HIGH_CONFIDENCE_HYPOTHESIS with an unresolved component cause, and the 20-delete threshold does not apply to it.
+Issue A only needs the Node shim to manifest. Issue B is strongly associated with
+the WorkBuddy-native execution environment; `tsbx.dll` remains a
+high-confidence component hypothesis. The two issues must not be conflated:
+Issue A is component-confirmed (Node shim + 20-delete bulk-guard); Issue B's
+cause is a HIGH_CONFIDENCE_HYPOTHESIS with an unresolved component cause, and the
+20-delete threshold does not apply to it.
 
 ## Safety
 

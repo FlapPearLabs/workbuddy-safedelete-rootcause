@@ -109,10 +109,12 @@ user-side audit log independently confirms the same error class.
   every checkpoint; loss was **not** reproduced in that one controlled run.
   Combined with R1, the anomaly is **intermittent across observed native runs**
   (`INTERMITTENT_ACROSS_OBSERVED_NATIVE_RUNS = YES`).
-- **NOT REPRODUCED from a Mavis / non-WorkBuddy shell** — the kernel filter
-  (`tsbx.dll`) is only loaded into processes spawned by `sandbox-cli.exe`.
+- **NOT REPRODUCED from a Mavis / non-WorkBuddy shell** — `tsbx.dll` is a
+  leading candidate component because it is present in the native sandbox stack
+  and fits the observed control results, but its attachment/interception
+  behavior was not directly traced.
 
-| | NORMAL | WORKBUDDY SHIM-ONLY (env + `NODE_OPTIONS=--require=...`) | WORKBUDDY NATIVE (kernel filter) |
+| | NORMAL | WORKBUDDY SHIM-ONLY (env + `NODE_OPTIONS=--require=...`) | WORKBUDDY NATIVE (sandbox/filesystem layer) |
 |---|---|---|---|
 | Non-WorkBuddy shell probe | 11/11 `WORKTREE_CHECK_VERDICT=CLEAN` | 11/11 `WORKTREE_CHECK_VERDICT=CLEAN` | n/a (filter not active) |
 | Native WorkBuddy R1 | — | — | **REPRODUCED** (59-file worktree-only loss) |
@@ -146,8 +148,10 @@ This mechanism has **NOT** been directly observed.
 
 - `GIT_COMPONENT_CAUSE = UNRESOLVED`. The specific component that performs the
   worktree mutation is not directly observed. Candidates, in order of fit:
-  1. `tsbx.dll` kernel minifilter applied to all file operations of processes
-     spawned by `sandbox-cli.exe` (HIGH_CONFIDENCE_HYPOTHESIS).
+  1. `tsbx.dll` is a leading candidate component because it is present in the
+     native sandbox stack and fits the observed control results, but its
+     attachment/interception behavior was not directly traced
+     (HIGH_CONFIDENCE_HYPOTHESIS).
   2. `ModifyBackup` IPC / recycle-bin routing (`tsbx_rules.json` references
      `recyclebin_backup: true`; `modify_backup` field referenced in the binary
      but not in the current rules file).
@@ -186,7 +190,7 @@ operations:
 |---|---|---|---|
 | **Node shim** (`genie-safe-delete.cjs`) | `fs.unlinkSync` / `fs.rmSync` / etc. in Node.js processes with `CODEBUDDY_SESSION_ID` set | All Node processes spawned by WorkBuddy (test code, npm, etc.) | **YES** — direct repro of Issue A; **conclusively rules it out for Issue B** |
 | **Shell shim** (`safe-bin/{rm,rmdir,unlink}`) | `rm` / `rmdir` / `unlink` in shell sessions via `PATH` override | All bash / sh processes spawned by WorkBuddy | NOT TESTED (out of scope for this round) |
-| **Kernel filter** (`tsbx.dll` + `tsbx_rules.json`) | All file system operations at the IRP level for any process whose handle is associated with the filter | All processes spawned by WorkBuddy (git.exe, node.exe, npm.cmd, etc.) | **NATIVE R1 REPRODUCED** the worktree loss; R2 one-shot clean → intermittent; `GIT_COMPONENT_CAUSE=UNRESOLVED`, `TSBX_FILTER_CAUSE=HIGH_CONFIDENCE_HYPOTHESIS` for Issue B |
+| **Kernel filter** (`tsbx.dll` + `tsbx_rules.json`) | candidate native filesystem interception layer; exact interception scope not directly traced | candidate native sandbox/filesystem component; exact attachment/interception coverage unresolved | **NATIVE R1 REPRODUCED** the worktree loss; R2 one-shot clean → intermittent; `GIT_COMPONENT_CAUSE=UNRESOLVED`, `TSBX_FILTER_CAUSE=HIGH_CONFIDENCE_HYPOTHESIS` for Issue B |
 
 The Node shim alone is sufficient to cause Issue A (component-confirmed).
 For Issue B, the `tsbx.dll` kernel filter is a **HIGH_CONFIDENCE_HYPOTHESIS**
@@ -201,7 +205,7 @@ bulk-guard threshold that governs Issue A does **not** apply to Issue B.
 
 ## A/B result table
 
-| Probe | NORMAL | WORKBUDDY SHIM SIMULATION | WORKBUDDY NATIVE (kernel filter) |
+| Probe | NORMAL | WORKBUDDY SHIM SIMULATION | WORKBUDDY NATIVE (sandbox/filesystem layer) |
 |---|---|---|---|
 | Node fs.rm small (5 files) | native delete, exit 0 | shim silently trashes, exit 0 | n/a (kernel filter not exercised in lab) |
 | Node fs.rm large (40 files) | native delete, exit 0 | shim BLOCKS with `SAFE_DELETE_BULK_CONFIRM_REQUIRED`, exit 1 | n/a |

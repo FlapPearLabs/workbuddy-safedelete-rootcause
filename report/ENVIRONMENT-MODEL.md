@@ -48,7 +48,7 @@ local only). This document is referenced by `BUG-A-NPM-SAFE-DELETE.md`,
 |---|---|---|
 | `genie-safe-delete.cjs` | `A9F9800C1244ADA606A73C96699DA3EBB3E056CE2115BF50912CD9EFC302D1C7` | Node shim — patches `fs.rmSync` etc. when `CODEBUDDY_SESSION_ID` set (Bug A) |
 | `safe-delete-bulk-guard.cjs` | `EA40BA9DFD90D6555AC516AE3CA9C1BE7332D826781FBB07AC071903D88CA822` | bulk-guard — throws `SAFE_DELETE_BULK_CONFIRM_REQUIRED` at threshold 20 (Bug A) |
-| `tsbx.dll` | 614,448 bytes (kernel minifilter) | `tsbx` kernel filter host, loaded by `sandbox-cli.exe` (Bug B candidate) |
+| `tsbx.dll` | 614,448 bytes (kernel minifilter) | present in the sandbox distribution; candidate component for Bug B (attachment/interception semantics not directly traced) |
 | `genie-trash/win32-x64.exe` | 2,670,352 bytes (Rust crate trash-5.2.6, Tencent-signed) | performs the actual move-to-recycle-bin for the shim |
 | `tsbx_rules.json` | `30A07E5FB92AD06D7EFD3A0DA7F1AA796CBDF3C3517EF1D70C8FA1E658B9A45A` | sandbox rule file (see §4) |
 
@@ -100,8 +100,9 @@ Observed and inferred distinctions during the investigation:
    (Bug B candidate, GIT-007).
 3. **Native ancestry** is verifiable: `assert-native-workbuddy-context.ps1`
    confirms the process tree reaches `sandbox-cli.exe` (R1) or `WorkBuddy.exe`
-   with a present `CODEBUDDY_SESSION_ID` (R2). Non-WorkBuddy shells do not load
-   the filter, which is why Bug B never reproduces outside the native chain
+   with a present `CODEBUDDY_SESSION_ID` (R2). Bug B was not observed in the
+   tested non-WorkBuddy controls. Whether differences in native sandbox/filter
+   attachment explain that result remains unresolved
    (GIT-008, WORKBUDDY_RUNTIME_ASSOCIATION=VERY_HIGH).
 
 ## 6. Sanitization placeholder glossary
