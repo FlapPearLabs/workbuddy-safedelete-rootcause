@@ -77,8 +77,11 @@ The probe mirrors the 2026-08-14 F1 natural incident shape: a small 3-path delta
 | Loss persisted across checkout-back | YES (not self-healing) |
 
 **Signature:** `HEAD=yes, INDEX=yes, PHYSICAL=no, HEAD_TREE==INDEX_TREE, FSCK healthy` —
-the canonical WORKTREE_ONLY_LOSS signature. `git restore --worktree` recovers every
-missing file non-destructively.
+the canonical WORKTREE_ONLY_LOSS signature. In the real production incidents,
+committed worktree-only losses were successfully recovered with `git restore --worktree`.
+The synthetic R1 probe itself was intentionally left unrecovered after evidence capture
+to preserve the anomalous worktree for independent review (RAW R1 records
+`RECOVERY_PERFORMED = NO`).
 
 **First observed non-clean step:** `step-1a-switch-to-feature`
 **First observed non-clean operation:** `git checkout feature-probe-f1shape`

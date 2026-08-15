@@ -15,8 +15,9 @@ Canonical repository: `https://github.com/FlapPearLabs/workbuddy-safedelete-root
 - [x] No new native experiments added in this consolidation pass
 - [x] No Phase 2A work performed
 - [x] `zhihu-grabber-toolkit` left unchanged (read-only evidence source)
-- [x] All tracked files pass sanitization scan (no `<USER_PROFILE>`, tokens,
-      cookies, real prod paths) — see `report/SOURCE-COVERAGE-AUDIT.md`
+- [x] All tracked files pass sanitization scan (no REAL user-profile paths;
+      placeholders such as `<USER_PROFILE>` are expected) — see
+      `report/SOURCE-COVERAGE-AUDIT.md`
 - [x] Proprietary content audit = **PASS** (no full WorkBuddy source; only
       sha256 + minimal excerpts) — see `ROOT_CAUSE_CLOSURE_REPORT.md` §Privacy
 - [x] Raw local evidence (Mavis context blobs, native-run logs) **not** committed
@@ -60,7 +61,7 @@ COMPONENT_CAUSE=CONFIRMED`. Owner: WorkBuddy `safe-delete` team.
 
 **Bug B classification:** `REAL_WORLD_INCIDENTS=CONFIRMED ·
 SYNTHETIC_NATIVE_REPRODUCTION=CONFIRMED · COMPONENT_CAUSE=UNRESOLVED`.
-Owner: WorkBuddy `sandbox` team. Do **not** state "race confirmed" or
+Suggested routing: WorkBuddy sandbox/filesystem team, subject to Tencent triage. Do **not** state "race confirmed" or
 "component confirmed".
 
 > Raw native-run logs (`work/native-runs/**`) are **local-only** (gitignored,
@@ -74,7 +75,8 @@ Owner: WorkBuddy `sandbox` team. Do **not** state "race confirmed" or
 
 1. **WorkBuddy application — Help / Feedback**
    Attach: Bug A report + Bug B report (or the canonical repo URL). Two linked
-   bugs; note the shared `deny-by-default + threshold=20` product philosophy.
+   bugs; two separate WorkBuddy filesystem-safety bugs; Bug A is
+   component-confirmed, while Bug B's specific component remains unresolved.
 2. **Official WorkBuddy support email** (if appropriate per policy)
    Same two reports; reference the canonical repository URL for the full
    evidence pack and harness.

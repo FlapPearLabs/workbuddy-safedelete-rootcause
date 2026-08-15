@@ -500,7 +500,7 @@ file. Please:
 
 If the user already has ProcMon installed (`procmon.exe` from
 Sysinternals), or can run `xperf` (Windows Performance Toolkit),
-Phase 3 produces direct evidence of the kernel-filter denials.
+Phase 3 produces direct evidence of the relevant filesystem operations and sandbox / filter activity (a denial is a possible but not presupposed outcome).
 
 ### 7.1 — ProcMon (preferred if available)
 

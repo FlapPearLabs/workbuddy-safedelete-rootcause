@@ -112,7 +112,7 @@ The WorkBuddy runtime is associated with the loss.
 
 - STATUS = OBSERVED_ASSOCIATION = STRONG
 - CONFIDENCE = VERY_HIGH
-- PRIMARY_EVIDENCE = `REPAIR_R2_FINAL_REPORT.md` (`WORKBUDDY_RUNTIME_ASSOCIATION=VERY_HIGH`);
+- PRIMARY_EVIDENCE = `report/NATIVE-R1-EVIDENCE.md` / `report/NATIVE-R2-EVIDENCE.md` (`WORKBUDDY_RUNTIME_ASSOCIATION=VERY_HIGH`);
   native ancestry to `sandbox-cli.exe`/`WorkBuddy.exe`
 - SECONDARY_EVIDENCE = loss never observed from a non-WorkBuddy shell
 - REPRO_METHOD = `assert-native-workbuddy-context.ps1`
@@ -124,7 +124,7 @@ The specific component cause of Bug B.
 
 - STATUS = UNKNOWN
 - CONFIDENCE = UNRESOLVED
-- PRIMARY_EVIDENCE = `REPAIR_R2_FINAL_REPORT.md` (`GIT_COMPONENT_CAUSE=UNRESOLVED`)
+- PRIMARY_EVIDENCE = `report/NATIVE-R1-EVIDENCE.md` / `report/NATIVE-R2-EVIDENCE.md` (`GIT_COMPONENT_CAUSE=UNRESOLVED`)
 - SECONDARY_EVIDENCE = both R1 and R2 lack direct component-level evidence
 - REPRO_METHOD = n/a (open question)
 - NEGATIVE CONTROLS = n/a

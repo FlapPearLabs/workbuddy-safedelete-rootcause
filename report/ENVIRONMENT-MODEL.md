@@ -37,9 +37,9 @@ local only). This document is referenced by `BUG-A-NPM-SAFE-DELETE.md`,
 
 > **Version drift note (ENV-001):** the Mavis lab ran under 5.3.11; the native
 > R1 reproduction ran under 5.3.13. Both are observed facts. The drift does not
-> change the conclusions: Bug A is component-confirmed and version-independent at
-> the shim/thresholds level; Bug B reproduced under 5.3.13 and was clean under a
-> controlled 5.3.x rerun. The specific WorkBuddy build is not itself a causal
+> change the conclusions: Bug A is component-confirmed at the shim/thresholds level
+> (tested under the observed 5.3.11 and 5.3.13 artifacts); Bug B reproduced under
+> 5.3.13 and was clean under a controlled 5.3.x rerun. The specific WorkBuddy build is not itself a causal
 > variable under test.
 
 ## 3. Safe-delete / sandbox artifacts (sha256-pinned)
@@ -74,31 +74,30 @@ local only). This document is referenced by `BUG-A-NPM-SAFE-DELETE.md`,
   denied delete is **not** directly observed — this is part of the unresolved
   component cause for Bug B.
 
-## 5. Process-execution model (how the filters attach)
+## 5. Process-execution model (observed and inferred)
 
-WorkBuddy spawns tool-call child processes through `sandbox-cli.exe`, which
-attaches the `tsbx.dll` kernel minifilter to the child process tree:
+**Observed:** WorkBuddy tool calls are observed to execute through a native
+WorkBuddy/sandbox process chain (`WorkBuddy.exe` → `sandbox-cli.exe` → child
+process such as `git.exe` / `node.exe` / `npm.cmd` / `bash`). `tsbx.dll` and
+`tsbx_rules.json` are present in the sandbox distribution.
 
-```
-WorkBuddy.exe
-  └─ sandbox-cli.exe            (loads tsbx.dll as kernel filter host)
-       └─ <child process>       (git.exe / node.exe / npm.cmd / bash ...)
-            ├─ IRP-level file ops intercepted by tsbx filter
-            └─ env: CODEBUDDY_SESSION_ID=<id>   (set by WorkBuddy)
-                 └─ NODE_OPTIONS=--require=genie-safe-delete.cjs
-                    (Node shim active in Node children only)
-```
+**Not directly proven (relevant to Bug B):** that `tsbx.dll` is attached to
+*every* child process; that it intercepts *every* IRP/file operation; that it
+denied the specific Git worktree operation; the exact `ModifyBackup` /
+recycle-bin routing semantics. The exact attachment/interception semantics
+relevant to Bug B were not directly traced.
 
-Key distinctions proven during the investigation:
+Observed and inferred distinctions during the investigation:
 
 1. **Node shim** attaches **only** to Node processes that inherit
    `CODEBUDDY_SESSION_ID` + `NODE_OPTIONS=--require=genie-safe-delete.cjs`.
    It patches `fs.*` delete entry points. It does **not** touch `git.exe`
    (FALSIFIED as the cause of Bug B via the SHIM-ONLY control, GIT-002).
-2. **Kernel filter** (`tsbx.dll`) attaches to **all** file operations of every
-   child process spawned through `sandbox-cli.exe`, at the IRP level. It is the
-   leading candidate mechanism that can affect `git.exe` worktree operations (Bug B
-   candidate, GIT-007; HIGH_CONFIDENCE_HYPOTHESIS).
+2. **Kernel filter** (`tsbx.dll`) — inferred to attach to file operations of
+   child processes spawned through `sandbox-cli.exe` (the IRP-level mechanism is
+   plausible but not directly traced). It is the leading candidate mechanism
+   (HIGH_CONFIDENCE_HYPOTHESIS) that can affect `git.exe` worktree operations
+   (Bug B candidate, GIT-007).
 3. **Native ancestry** is verifiable: `assert-native-workbuddy-context.ps1`
    confirms the process tree reaches `sandbox-cli.exe` (R1) or `WorkBuddy.exe`
    with a present `CODEBUDDY_SESSION_ID` (R2). Non-WorkBuddy shells do not load

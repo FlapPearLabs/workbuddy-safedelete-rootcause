@@ -129,22 +129,18 @@ observed denying a specific operation.
 
 ### B.2 Product-level cause
 
-The WorkBuddy kernel sandbox (loaded by `sandbox-cli.exe` into all child
-processes) applies a `deny_write` default policy to anything not in the
-allow-list, and `<WORKSPACE>\**` is not in the allow-list. When WorkBuddy
-spawns `git.exe` as a child to perform `git switch` or `git merge`, the
-kernel filter intercepts the worktree file operations. The new file
-writes (create) are allowed or denied inconsistently with the old file
-unlinks (delete), so the worktree ends up with a partial mutation that
-git does not consider valid (it shows ` D` lines). Because the user has
-no view of the kernel filter's denials (no log, no error), the loss
-appears to come from nowhere.
+**Observed facts:**
+- WorkBuddy-native R1 reproduced `WORKTREE_ONLY_LOSS`.
+- normal and Node-shim-only controls were clean.
+- sandbox policy artifacts include `deny_write` / `recyclebin_backup`.
+- no direct operation trace identifies the mutating component.
 
-This is the **HIGH_CONFIDENCE_HYPOTHESIS** for the product-level cause. It is
-the leading candidate mechanism consistent with all observed facts after Defender / SSD /
-NTFS / Defender-quarantine were ruled out, and after the Node shim was
-falsified by the SHIM-ONLY control. It has **not** been directly observed
-denying a specific operation.
+**Leading hypothesis:**
+the WorkBuddy-native sandbox/filesystem layer, potentially involving
+`tsbx.dll` / `ModifyBackup` / recycle-bin routing, may interfere with Git
+worktree filesystem mutations.
+
+This mechanism has **NOT** been directly observed.
 
 ### B.3 Component-level cause (UNRESOLVED)
 
@@ -196,8 +192,9 @@ The Node shim alone is sufficient to cause Issue A (component-confirmed).
 For Issue B, the `tsbx.dll` kernel filter is a **HIGH_CONFIDENCE_HYPOTHESIS**
 (leading candidate), **not** an established cause: it has not been directly
 observed denying a specific git operation, and the source of run-to-run
-variability (R1 reproduced, R2 clean) is unresolved. The two issues have
-**different root-cause layers** and must not be conflated — the 20-delete
+variability (R1 reproduced, R2 clean) is unresolved. Bug A has a confirmed
+component layer; Bug B remains unresolved, and the two must not be conflated —
+the 20-delete
 bulk-guard threshold that governs Issue A does **not** apply to Issue B.
 
 ---
@@ -343,8 +340,9 @@ The two repos have different roles:
 
 ### Final vendor filing: TWO LINKED BUGS
 
-The two issues have different root-cause layers even though they share the same
-product-level philosophy (deny-by-default + threshold=20 default). They are
+Bug A has a confirmed component layer; Bug B remains unresolved. The two do NOT
+share the same product-level philosophy — the 20-delete threshold is confirmed
+only for Bug A. They are
 recommended to be filed as **two linked bugs** so that the WorkBuddy
 `safe-delete` and `sandbox` owners can each be assigned the right issue:
 
@@ -366,9 +364,11 @@ recommended to be filed as **two linked bugs** so that the WorkBuddy
     (tsbx filter vs. `ModifyBackup` IPC vs. recycle-bin routing) is not
     directly observed.
   - **Candidate component-level cause (HIGH_CONFIDENCE_HYPOTHESIS):** the
-    `tsbx.dll` kernel filter applied to all file operations of processes spawned
-    by `sandbox-cli.exe` inside a real WorkBuddy session.
-  - **Owner:** WorkBuddy `sandbox` team.
+    `tsbx.dll` kernel filter (present in the sandbox distribution) is the leading
+    candidate for the component that may interfere with file operations of
+    processes spawned by `sandbox-cli.exe`; this attachment/interception has NOT
+    been directly observed.
+  - **Owner:** Vendor routing TBD; likely sandbox/filesystem team.
   - Stand-alone report: `report/BUG-B-GIT-WORKTREE-LOSS.md`.
 
 An umbrella bug that links both is acceptable if Tencent prefers a single

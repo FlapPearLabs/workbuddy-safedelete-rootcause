@@ -107,7 +107,7 @@ variability remains unresolved.
 These are optional next steps for the vendor, marked **FUTURE_DIAGNOSTIC_IF_VENDOR_REQUESTS**:
 1. **Narrow sandbox-rule A/B** — apply a scoped `inherit_user` rule for the dev workspace and
    re-run the native probe (see `NEXT-WORKBUDDY-GIT-EXPERIMENT.md`).
-2. **ETW / ProcMon** capture of kernel-filter denials during a reproducing native run.
+2. **ETW / ProcMon** capture of relevant filesystem operations and sandbox / filter activity during a reproducing native run.
 
 ## STATUS
 `PHENOMENON_CONFIRMED = YES · REAL_WORLD_INCIDENTS = CONFIRMED ·

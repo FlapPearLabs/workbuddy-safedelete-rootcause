@@ -248,8 +248,9 @@ cookies).** Only the safe, abstracted facts are recorded.
   per-invocation vs. process startup). This is independent of the
   F1 incident and is documented elsewhere.
 - Any claim that the cause is the same as Issue A (npm ci /
-  Node shim). The two issues have different root-cause layers even
-  though they share the same product-level philosophy.
+  Node shim). Bug A has a confirmed component layer; Bug B remains
+  unresolved. The two do NOT share the same product-level philosophy —
+  the 20-delete threshold is confirmed only for Bug A.
 
 ---
 

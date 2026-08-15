@@ -67,10 +67,14 @@ PHASE4_RESULT=NOT_EXECUTED_REQUIRES_WORKBUDDY_PARENT
 > the two-bug overview and confidence boundaries, then the master reconciliation
 > in [`report/MASTER-INVESTIGATION-LEDGER.md`](report/MASTER-INVESTIGATION-LEDGER.md).
 
-1. **[`report/BUG-REPORT-TENCENT.md`](report/BUG-REPORT-TENCENT.md)** — the
-   submission-ready bug report (5-minute read, 30-second Issue A repro,
-   no PII, no real production source).
-2. **[`report/ROOT_CAUSE_CLOSURE_REPORT.md`](report/ROOT_CAUSE_CLOSURE_REPORT.md)**
+1. **[`report/BUG-A-NPM-SAFE-DELETE.md`](report/BUG-A-NPM-SAFE-DELETE.md)** —
+   the standalone Bug A vendor report (component-confirmed, 30-second
+   repro, no PII, no real production source).
+2. **[`report/BUG-B-GIT-WORKTREE-LOSS.md`](report/BUG-B-GIT-WORKTREE-LOSS.md)** —
+   the standalone Bug B vendor report (phenomenon confirmed, component
+   cause unresolved; primary public evidence in `report/NATIVE-R1-EVIDENCE.md`
+   / `report/NATIVE-R2-EVIDENCE.md`).
+3. **[`report/ROOT_CAUSE_CLOSURE_REPORT.md`](report/ROOT_CAUSE_CLOSURE_REPORT.md)**
    — the closure summary (4-class data-loss analysis, layering summary,
    privacy / proprietary content audit).
 3. **[`report/sanitized-evidence.md`](report/sanitized-evidence.md)** — the
@@ -165,14 +169,15 @@ Git identity. This is the user's public commit author, not a credential.
 
 ## Recommended bug report structure
 
-We recommend filing as **two linked bugs** because the two issues have
-**different root-cause layers** even though both sit within WorkBuddy's
-safe-delete / sandbox stack:
+We recommend filing as **two linked bugs** because Bug A has a confirmed
+component layer while Bug B remains unresolved, even though both sit within
+WorkBuddy's safe-delete / sandbox stack:
 
 - **Bug A** — `safe-delete` Node shim + bulk-guard (owner: WorkBuddy
   `safe-delete` team). Concrete, repro'd in the lab, has a 30-second
   repro.
-- **Bug B** — `tsbx` kernel sandbox (owner: WorkBuddy `sandbox` team).
+- **Bug B** — WorkBuddy native sandbox/filesystem behavior (specific
+  component unresolved; `tsbx.dll` is a HIGH_CONFIDENCE_HYPOTHESIS).
   Phenomenon confirmed by native R1 reproduction + 5+ real-world events;
   component cause unresolved; stand-alone report in
   `report/BUG-B-GIT-WORKTREE-LOSS.md`, future diagnostics in
@@ -195,8 +200,9 @@ sub-issues so each owner can address their own layer.
   and a controlled R2 four-checkpoint run was clean in that one shot —
   i.e. intermittent across observed native runs, component cause still
   open (`GIT_COMPONENT_CAUSE=UNRESOLVED`, `TSBX_FILTER_CAUSE=HIGH_CONFIDENCE_HYPOTHESIS`).
-  Severity can be upgraded to **HIGH** if ETW / ProcMon captures the
-  kernel-filter denials directly (FUTURE_DIAGNOSTIC_IF_VENDOR_REQUESTS).
+  Severity should be reassessed if a direct component-level filesystem
+  trace demonstrates the mutation mechanism or if permanent user-data loss
+  is observed (FUTURE_DIAGNOSTIC_IF_VENDOR_REQUESTS).
 
 ## Layering summary (Experiment 8)
 

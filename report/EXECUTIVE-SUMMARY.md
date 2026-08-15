@@ -12,18 +12,18 @@ to a claim in [`EVIDENCE-INDEX.md`](EVIDENCE-INDEX.md).
 
 ## Two distinct bugs
 
-This investigation covers **two bugs with different root-cause layers** that share the same
-product philosophy (deny-by-default + a low default delete threshold). They MUST be filed and
-tracked separately.
+Both bugs involve WorkBuddy filesystem-safety behavior, but their confirmed mechanisms differ.
+Bug A is component-confirmed; Bug B's specific product/component cause remains unresolved.
+They MUST be filed and tracked separately.
 
 | | **Bug A — npm ci / Node safe-delete** | **Bug B — Git worktree physical loss** |
 |---|---|---|
-| Layer | Node shim (`genie-safe-delete.cjs`) + bulk-guard (`safe-delete-bulk-guard.cjs`) | `tsbx.dll` kernel filter loaded by `sandbox-cli.exe` |
+| Layer | Node shim (`genie-safe-delete.cjs`) + bulk-guard (`safe-delete-bulk-guard.cjs`) | WorkBuddy native sandbox/filesystem layer (specific component unresolved) |
 | Reproduced in lab | **YES** (1-click, disposable) | **YES** (native WorkBuddy synthetic probe, R1) |
 | Component cause | **CONFIRMED** | **UNRESOLVED** |
 | Runtime association | **CONFIRMED** (shim active when `CODEBUDDY_SESSION_ID` set) | **VERY_HIGH** (loss only under WorkBuddy-native ancestry) |
 | Status | Closed at component level | Phenomenon confirmed; component open |
-| Owner | WorkBuddy `safe-delete` team | WorkBuddy `sandbox` team |
+| Owner | WorkBuddy `safe-delete` team | Vendor routing TBD; likely sandbox/filesystem team |
 
 ---
 
@@ -128,7 +128,7 @@ evidence pack — which this repository now is.
 1. **Narrow sandbox-rule A/B** — apply a scoped `inherit_user` rule for the dev workspace and
    re-run the native probe (see [`NEXT-WORKBUDDY-GIT-EXPERIMENT.md`](NEXT-WORKBUDDY-GIT-EXPERIMENT.md)).
    NOT REQUIRED for the current submission; FUTURE_DIAGNOSTIC_IF_VENDOR_REQUESTS.
-2. **ETW / ProcMon capture** of the kernel-filter denials during a reproducing native run.
+2. **ETW / ProcMon capture** of relevant filesystem operations and sandbox / filter activity during a reproducing native run.
    NOT REQUIRED for the current submission; FUTURE_DIAGNOSTIC_IF_VENDOR_REQUESTS.
 3. **Component-level confirmation** of which kernel component (tsbx filter vs. `ModifyBackup`
    IPC vs. recycle-bin routing) performs the worktree mutation, and why it is intermittent.
