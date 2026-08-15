@@ -17,12 +17,15 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-# Locate the synthetic input. Use a fixed temp path under <TEMP>/workbuddy-rootcause-control
-# (shim skips this; the parser is plain PowerShell, no shim involvement).
-$tmpRoot = Join-Path $env:TEMP 'workbuddy-rootcause-control\parser-test'
-if (Test-Path $tmpRoot) { mavis-trash $tmpRoot }
+# Use a unique GUID-owned temp directory. The test itself owns this directory;
+# cleanup uses ordinary PowerShell Remove-Item ONLY against the exact GUID dir
+# (never a parent dir, never a repository path). No mavis-trash / unrelated
+# environment-utility dependency, so the deterministic parser regression no
+# longer depends on an external binary.
+$tmpRoot = Join-Path $env:TEMP ('workbuddy-rootcause-control\parser-test-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmpRoot -Force | Out-Null
 $synthFile = Join-Path $tmpRoot 'synthetic-results.txt'
+try {
 
 # Synthetic results: 4 clean steps + 1 step with WORKTREE_ONLY_LOSS.
 $synth = @"
@@ -162,3 +165,8 @@ if ($fail) {
     exit 1
 }
 Write-Output "PARSER_TEST_RESULT=PASS"
+} finally {
+    # Cleanup: ordinary Remove-Item against the exact GUID-owned dir only.
+    # Never delete a parent directory; never operate on repository paths.
+    if (Test-Path $tmpRoot) { Remove-Item $tmpRoot -Recurse -Force -ErrorAction SilentlyContinue }
+}

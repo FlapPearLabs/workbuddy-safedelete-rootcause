@@ -19,8 +19,26 @@
 #
 # No production source content is copied. All text is synthetic.
 #
+# R2 LOCALIZATION INSTRUMENTATION
+# -------------------------------
+# This builder now emits FOUR physical checkpoints (A/B/C/D) so the exact
+# CLEAN->NON_CLEAN transition can be localized inside the build sequence:
+#
+#   A: after commit-A on master, before creating the feature branch
+#   B: after `git checkout -b <feature>`, before the 3-path edits
+#   C: after commit-B + shape assertion, before `git checkout master`
+#   D: after the final `git checkout master`
+#
+# Each checkpoint runs bin/check-worktree.ps1 and records physical state
+# (HEAD=yes/index=yes/PHYSICAL=no is exactly the bug under investigation,
+# so GIT tree/index presence does NOT prove physical file presence).
+#
+# The builder STOPS at the first non-CLEAN checkpoint (or at the first
+# instrumentation error) and preserves evidence; it does NOT keep mutating
+# the synthetic repo to accumulate more failures.
+#
 # Usage:
-#   .\build-git-probe-f1-shape.ps1 -Repo <path> [-BranchName feature/probe/f1-shape]
+#   .\build-git-probe-f1-shape.ps1 -Repo <path> [-BranchName feature-probe-f1shape]
 #
 # Output (structured, for the orchestrator / parser to consume):
 #   GIT_PROBE_F1_SHAPE_INIT_REPO=<path>
@@ -34,11 +52,18 @@
 #   GIT_PROBE_F1_SHAPE_MODIFIED_PATH_COUNT=<n>      # == 2 required
 #   GIT_PROBE_F1_SHAPE_VALID=YES|NO
 #   GIT_PROBE_F1_SHAPE_BUILD_OK=YES|NO
+#   <CHECKPOINT_A/B/C/D fields>
+#   <FINAL_CHECKOUT fields>
+#   FIRST_KNOWN_NON_CLEAN_CHECKPOINT=
+#   FIRST_CLEAN_TO_NONCLEAN_INTERVAL=
+#   LOSS_LOCALIZED_TO_FINAL_CHECKOUT_INTERVAL=
+#   WORKTREE_INTERFERENCE=
+#   CLASSIFICATION=
 
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][string]$Repo,
-    [string]$BranchName = 'feature/probe/f1-shape'
+    [string]$BranchName = 'feature-probe-f1shape'
 )
 # Resolve to an absolute path so check-worktree (which re-pushes into $Repo)
 # is robust regardless of the caller's current location.
@@ -68,6 +93,98 @@ if (Test-Path $Repo) {
     throw "build-git-probe-f1-shape: target path already exists; per P4 use a fresh unique dir. Path: $Repo"
 }
 New-Item -ItemType Directory -Path $Repo -Force | Out-Null
+
+# ─────────────────────────────────────────────────────────────────────────
+# Invoke-WorktreeCheckpoint
+#   Runs bin/check-worktree.ps1 for one named label and emits the
+#   CHECKPOINT_<PREFIX>_* record. On a checker throw it sets
+#   CHECK_STATUS=ERROR (never WORKTREE_INTERFERENCE=YES) and records the
+#   sanitized exception type/message.
+# ─────────────────────────────────────────────────────────────────────────
+function Invoke-WorktreeCheckpoint {
+    param(
+        [Parameter(Mandatory=$true)][string]$Prefix,
+        [Parameter(Mandatory=$true)][string]$Label,
+        [Parameter(Mandatory=$true)][string]$RepoPath,
+        [Parameter(Mandatory=$true)][ref]$Result
+    )
+    $out = $null
+    $checkStatus = 'OK'
+    $errType = ''
+    $errMsg = ''
+    try {
+        $out = & "$PSScriptRoot\check-worktree.ps1" -Repo $RepoPath -Label $Label 2>&1
+    } catch {
+        $checkStatus = 'ERROR'
+        $errType = $_.Exception.GetType().FullName
+        # Sanitized: type + message only; never include command lines / secrets.
+        $errMsg = $_.Exception.Message
+    }
+
+    # Echo the raw checker record for traceability (parser/offline re-use).
+    if ($out) { foreach ($l in $out) { Write-Output $l } }
+
+    $verdict = 'UNKNOWN'; $missing = -1; $match = 'NO'; $fsck = 'NO'; $branch = ''; $head = ''
+    if ($checkStatus -eq 'OK') {
+        foreach ($l in $out) {
+            if ($l -match '^WORKTREE_CHECK_VERDICT\s+label=(\S+)\s+value=(\S+)') { $verdict = $matches[2] }
+            elseif ($l -match '^WORKTREE_CHECK_MISSING_COUNT=(\d+)') { $missing = [int]$matches[1] }
+            elseif ($l -match '^WORKTREE_CHECK_HEAD_INDEX_TREE_MATCH=(\S+)') { $match = $matches[1] }
+            elseif ($l -match '^WORKTREE_CHECK_FSCK_HEALTHY=(\S+)') { $fsck = $matches[1] }
+            elseif ($l -match '^WORKTREE_CHECK_BRANCH=(\S+)') { $branch = $matches[1] }
+            elseif ($l -match '^WORKTREE_CHECK_HEAD=(\S+)') { $head = $matches[1] }
+        }
+    }
+
+    Write-Output ($Prefix + "_LABEL=" + $Label)
+    Write-Output ($Prefix + "_CHECK_STATUS=" + $checkStatus)
+    if ($checkStatus -eq 'ERROR') {
+        Write-Output ($Prefix + "_CHECK_ERROR_TYPE=" + $errType)
+        Write-Output ($Prefix + "_CHECK_ERROR_MESSAGE=" + $errMsg)
+        Write-Output ($Prefix + "_VERDICT=UNKNOWN")
+        Write-Output ($Prefix + "_MISSING_COUNT=-1")
+        Write-Output ($Prefix + "_HEAD_INDEX_TREE_MATCH=NO")
+        Write-Output ($Prefix + "_FSCK_HEALTHY=NO")
+        Write-Output ($Prefix + "_BRANCH=")
+        Write-Output ($Prefix + "_HEAD=")
+    } else {
+        Write-Output ($Prefix + "_BRANCH=" + $branch)
+        Write-Output ($Prefix + "_HEAD=" + $head)
+        Write-Output ($Prefix + "_VERDICT=" + $verdict)
+        Write-Output ($Prefix + "_MISSING_COUNT=" + $missing)
+        Write-Output ($Prefix + "_HEAD_INDEX_TREE_MATCH=" + $match)
+        Write-Output ($Prefix + "_FSCK_HEALTHY=" + $fsck)
+    }
+
+    $Result.Value = [PSCustomObject]@{
+        CheckStatus = $checkStatus
+        Verdict     = $verdict
+        Missing     = $missing
+        Match       = $match
+        Fsck        = $fsck
+        Branch      = $branch
+        Head        = $head
+        ErrType     = $errType
+        ErrMsg      = $errMsg
+    }
+}
+
+# Emit the standardized stop/localization markers exactly once.
+function Emit-StopMarkers {
+    param(
+        [string]$FirstNonClean,
+        [string]$Interval,
+        [string]$LocalizedFinal,
+        [string]$Interference,
+        [string]$Classification
+    )
+    Write-Output ("FIRST_KNOWN_NON_CLEAN_CHECKPOINT=" + $FirstNonClean)
+    Write-Output ("FIRST_CLEAN_TO_NONCLEAN_INTERVAL=" + $Interval)
+    Write-Output ("LOSS_LOCALIZED_TO_FINAL_CHECKOUT_INTERVAL=" + $LocalizedFinal)
+    Write-Output ("WORKTREE_INTERFERENCE=" + $Interference)
+    Write-Output ("CLASSIFICATION=" + $Classification)
+}
+
 Push-Location $Repo
 try {
     $prevEAP = $ErrorActionPreference
@@ -107,8 +224,55 @@ try {
     $testLikeCount = (git ls-files | Where-Object { $_ -like 'test/*' } | Measure-Object).Count
     Write-Output ("GIT_PROBE_F1_SHAPE_TEST_LIKE_COUNT=" + $testLikeCount)
 
+    # ── CHECKPOINT A: after commit-A on master, BEFORE feature branch ──
+    $cpa = $null
+    Invoke-WorktreeCheckpoint -Prefix 'CHECKPOINT_A' -Label 'build-master-after-commit-a' -RepoPath $Repo -Result ([ref]$cpa)
+    if ($cpa.CheckStatus -eq 'ERROR') {
+        Emit-StopMarkers -FirstNonClean 'A' -Interval 'UNKNOWN' -LocalizedFinal 'NO' -Interference 'UNKNOWN' -Classification 'INSTRUMENTATION_ERROR'
+        $ErrorActionPreference = $prevEAP
+        return
+    }
+    if ($cpa.Verdict -ne 'CLEAN') {
+        # A non-CLEAN -> STOP. The loss happened at/before commit-A sequence.
+        Emit-StopMarkers -FirstNonClean 'A' -Interval 'NOT_LOCALIZED_BEFORE_A' -LocalizedFinal 'NO' -Interference 'YES' -Classification 'BUILD_MASTER_AFTER_COMMIT_A_NON_CLEAN'
+        $ErrorActionPreference = $prevEAP
+        return
+    }
+
     # ── feature branch: tiny 3-path delta ──
-    git checkout -b $BranchName 2>&1 | Out-Null
+    # Capture the initial feature checkout explicitly (FEATURE_CHECKOUT_*).
+    $featPrevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    $null = git checkout -b $BranchName 2>&1 | Out-String
+    $featureCheckoutExit = $LASTEXITCODE
+    $ErrorActionPreference = $featPrevEAP
+
+    $featureExpectedBranch = $BranchName
+    $featureExpectedHead   = $masterHead
+    $featureActualBranch   = (git rev-parse --abbrev-ref HEAD 2>$null)
+    $featureActualHead     = (git rev-parse HEAD 2>$null)
+    $featureTargetReached  = if (($featureActualBranch -eq $featureExpectedBranch) -and ($featureActualHead -eq $featureExpectedHead)) { 'YES' } else { 'NO' }
+
+    Write-Output ("FEATURE_CHECKOUT_EXIT=" + $featureCheckoutExit)
+    Write-Output ("FEATURE_CHECKOUT_EXPECTED_BRANCH=" + $featureExpectedBranch)
+    Write-Output ("FEATURE_CHECKOUT_ACTUAL_BRANCH=" + $featureActualBranch)
+    Write-Output ("FEATURE_CHECKOUT_EXPECTED_HEAD=" + $featureExpectedHead)
+    Write-Output ("FEATURE_CHECKOUT_ACTUAL_HEAD=" + $featureActualHead)
+    Write-Output ("FEATURE_CHECKOUT_TARGET_REACHED=" + $featureTargetReached)
+
+    # ── CHECKPOINT B: after `git checkout -b`, BEFORE the 3-path edits ──
+    $cpb = $null
+    Invoke-WorktreeCheckpoint -Prefix 'CHECKPOINT_B' -Label 'build-feature-after-initial-checkout' -RepoPath $Repo -Result ([ref]$cpb)
+    if ($cpb.CheckStatus -eq 'ERROR') {
+        Emit-StopMarkers -FirstNonClean 'B' -Interval 'UNKNOWN' -LocalizedFinal 'NO' -Interference 'UNKNOWN' -Classification 'INSTRUMENTATION_ERROR'
+        $ErrorActionPreference = $prevEAP
+        return
+    }
+    if ($cpb.Verdict -ne 'CLEAN') {
+        # A=CLEAN, B=NON_CLEAN -> localized to the initial feature checkout.
+        Emit-StopMarkers -FirstNonClean 'B' -Interval 'INITIAL_FEATURE_CHECKOUT' -LocalizedFinal 'NO' -Interference 'YES' -Classification 'BUILD_FEATURE_INITIAL_CHECKOUT_NON_CLEAN'
+        $ErrorActionPreference = $prevEAP
+        return
+    }
 
     # 1) existing src-like file modified: src/m01/main.txt
     Set-Content -LiteralPath 'src/m01/main.txt' -Value 'm01 feature modified' -Encoding ASCII -NoNewline
@@ -162,72 +326,75 @@ try {
         throw ("build-git-probe-f1-shape: shape invalid (base=" + (git ls-files | Measure-Object).Count + ">=" + $MIN_BASE_TRACKED + " testLike=" + $testLikeCount + ">=" + $MIN_TEST_LIKE + " changed=" + ($modified + $deleted + $added) + "==" + $REQUIRED_CHANGED + " deleted=" + $deleted + "==" + $REQUIRED_DELETED + " added=" + $added + "==" + $REQUIRED_ADDED + " modified=" + $modified + "==" + $REQUIRED_MODIFIED + ")")
     }
 
-    # ── REPAIR A: post-build physical baseline on master ──
-    # Run check-worktree immediately after the final `git checkout master`
-    # so the orchestrator can distinguish a build-phase loss (P1-1 CASE A)
-    # from a first-cycle-checkout loss (P1-1 CASE B). A structurally valid
-    # 3-path diff alone is NOT sufficient for WORKTREE_READY=YES.
-    $prevEAP2 = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    # ── CHECKPOINT C: after commit-B + shape assertion, BEFORE `git checkout master` ──
+    $cpc = $null
+    Invoke-WorktreeCheckpoint -Prefix 'CHECKPOINT_C' -Label 'build-feature-pre-final-checkout' -RepoPath $Repo -Result ([ref]$cpc)
+    if ($cpc.CheckStatus -eq 'ERROR') {
+        Emit-StopMarkers -FirstNonClean 'C' -Interval 'UNKNOWN' -LocalizedFinal 'NO' -Interference 'UNKNOWN' -Classification 'INSTRUMENTATION_ERROR'
+        $ErrorActionPreference = $prevEAP
+        return
+    }
+    if ($cpc.Verdict -ne 'CLEAN') {
+        # A=CLEAN, B=CLEAN, C=NON_CLEAN -> localized to feature edit/add/commit sequence.
+        Emit-StopMarkers -FirstNonClean 'C' -Interval 'FEATURE_EDIT_ADD_COMMIT_SEQUENCE' -LocalizedFinal 'NO' -Interference 'YES' -Classification 'BUILD_FEATURE_EDIT_ADD_COMMIT_NON_CLEAN'
+        $ErrorActionPreference = $prevEAP
+        return
+    }
+
+    # ── FINAL CHECKOUT: `git checkout master` (only reached if A/B/C CLEAN) ──
+    $finPrevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     $null = git checkout master 2>&1 | Out-String
-    $buildFinalCheckoutExit = $LASTEXITCODE
-    $ErrorActionPreference = $prevEAP2
+    $finalCheckoutExit = $LASTEXITCODE
+    $ErrorActionPreference = $finPrevEAP
 
-    $buildFinalExpectedBranch = 'master'
-    $buildFinalExpectedHead   = $masterHead
-    $buildFinalActualBranch   = (git rev-parse --abbrev-ref HEAD 2>$null)
-    $buildFinalActualHead     = (git rev-parse HEAD 2>$null)
-    $buildFinalTargetReached  = if (($buildFinalActualBranch -eq 'master') -and ($buildFinalActualHead -eq $buildFinalExpectedHead)) { 'YES' } else { 'NO' }
+    $finalExpectedBranch = 'master'
+    $finalExpectedHead   = $masterHead
+    $finalActualBranch   = (git rev-parse --abbrev-ref HEAD 2>$null)
+    $finalActualHead     = (git rev-parse HEAD 2>$null)
+    $finalTargetReached  = if (($finalActualBranch -eq 'master') -and ($finalActualHead -eq $finalExpectedHead)) { 'YES' } else { 'NO' }
 
-    Write-Output ("BUILD_FINAL_CHECKOUT_EXIT=" + $buildFinalCheckoutExit)
-    Write-Output ("BUILD_FINAL_EXPECTED_BRANCH=" + $buildFinalExpectedBranch)
-    Write-Output ("BUILD_FINAL_ACTUAL_BRANCH=" + $buildFinalActualBranch)
-    Write-Output ("BUILD_FINAL_EXPECTED_HEAD=" + $buildFinalExpectedHead)
-    Write-Output ("BUILD_FINAL_ACTUAL_HEAD=" + $buildFinalActualHead)
-    Write-Output ("BUILD_FINAL_TARGET_REACHED=" + $buildFinalTargetReached)
+    Write-Output ("FINAL_CHECKOUT_EXIT=" + $finalCheckoutExit)
+    Write-Output ("FINAL_CHECKOUT_EXPECTED_BRANCH=" + $finalExpectedBranch)
+    Write-Output ("FINAL_CHECKOUT_ACTUAL_BRANCH=" + $finalActualBranch)
+    Write-Output ("FINAL_CHECKOUT_EXPECTED_HEAD=" + $finalExpectedHead)
+    Write-Output ("FINAL_CHECKOUT_ACTUAL_HEAD=" + $finalActualHead)
+    Write-Output ("FINAL_CHECKOUT_TARGET_REACHED=" + $finalTargetReached)
 
-    # Full WORKTREE_CHECK_* record for the post-build master baseline.
-    $buildFinalCheckOut = $null
-    try {
-        $buildFinalCheckOut = & "$PSScriptRoot\check-worktree.ps1" -Repo $Repo -Label 'build-final-master-baseline' 2>&1
-    } catch {
-        Write-Output ("WORKTREE_CHECK_SCRIPT_ERROR label=build-final-master-baseline type=" + $_.Exception.GetType().FullName + " message=" + $_.Exception.Message)
-        $buildFinalCheckOut = @()
+    # ── CHECKPOINT D: immediately after the final checkout ──
+    $cpd = $null
+    Invoke-WorktreeCheckpoint -Prefix 'CHECKPOINT_D' -Label 'build-master-post-final-checkout' -RepoPath $Repo -Result ([ref]$cpd)
+    if ($cpd.CheckStatus -eq 'ERROR') {
+        Emit-StopMarkers -FirstNonClean 'D' -Interval 'UNKNOWN' -LocalizedFinal 'NO' -Interference 'UNKNOWN' -Classification 'INSTRUMENTATION_ERROR'
+        $ErrorActionPreference = $prevEAP
+        return
     }
-    if ($buildFinalCheckOut) { foreach ($l in $buildFinalCheckOut) { Write-Output $l } }
-
-    $finalVerdict = 'UNKNOWN'; $finalMissing = -1; $finalMatch = 'NO'; $finalFsck = 'NO'
-    if ($buildFinalCheckOut) {
-        foreach ($l in $buildFinalCheckOut) {
-            if ($l -match '^WORKTREE_CHECK_VERDICT\s+label=build-final-master-baseline\s+value=(\S+)') { $finalVerdict = $matches[1] }
-            elseif ($l -match '^WORKTREE_CHECK_MISSING_COUNT=(\d+)') { $finalMissing = [int]$matches[1] }
-            elseif ($l -match '^WORKTREE_CHECK_HEAD_INDEX_TREE_MATCH=(\S+)') { $finalMatch = $matches[1] }
-            elseif ($l -match '^WORKTREE_CHECK_FSCK_HEALTHY=(\S+)') { $finalFsck = $matches[1] }
-        }
-    }
-
-    Write-Output ("GIT_PROBE_F1_SHAPE_FINAL_WORKTREE_VERDICT=" + $finalVerdict)
-    Write-Output ("GIT_PROBE_F1_SHAPE_FINAL_MISSING_COUNT=" + $finalMissing)
-    Write-Output ("GIT_PROBE_F1_SHAPE_FINAL_HEAD_INDEX_TREE_MATCH=" + $finalMatch)
-    Write-Output ("GIT_PROBE_F1_SHAPE_FINAL_FSCK_HEALTHY=" + $finalFsck)
 
     # WORKTREE_READY=YES requires a clean physical master worktree on top of a
-    # structurally valid 3-path diff. Otherwise the caller MUST NOT start cycles.
-    $buildFinalReady = $false
-    if (($buildFinalCheckoutExit -eq 0) -and
-        ($buildFinalTargetReached -eq 'YES') -and
-        ($finalVerdict -eq 'CLEAN') -and
-        ($finalMissing -eq 0) -and
-        ($finalMatch -eq 'YES') -and
-        ($finalFsck -eq 'YES')) {
-        $buildFinalReady = $true
+    # structurally valid 3-path diff. A structurally valid diff alone is NOT enough.
+    $finalReady = $false
+    if (($finalCheckoutExit -eq 0) -and ($finalTargetReached -eq 'YES') -and
+        ($cpd.Verdict -eq 'CLEAN') -and ($cpd.Missing -eq 0) -and
+        ($cpd.Match -eq 'YES') -and ($cpd.Fsck -eq 'YES')) {
+        $finalReady = $true
     }
-    Write-Output ("GIT_PROBE_F1_SHAPE_WORKTREE_READY=" + $(if ($buildFinalReady) { 'YES' } else { 'NO' }))
-    if (-not $buildFinalReady) {
-        # Localization signal: the build sequence itself left the master
-        # worktree non-clean. Caller must treat this as BUILD_FINAL_WORKTREE_INTERFERENCE
-        # and preserve evidence; do NOT start mutation cycles.
+    Write-Output ("GIT_PROBE_F1_SHAPE_WORKTREE_READY=" + $(if ($finalReady) { 'YES' } else { 'NO' }))
+
+    if ($cpd.Verdict -ne 'CLEAN') {
+        if (($finalCheckoutExit -eq 0) -and ($finalTargetReached -eq 'YES')) {
+            # CASE 4 (desired): A/B/C CLEAN, final checkout reached, D non-CLEAN.
+            Emit-StopMarkers -FirstNonClean 'D' -Interval 'FINAL_GIT_CHECKOUT_MASTER' -LocalizedFinal 'YES' -Interference 'YES' -Classification 'BUILD_FINAL_CHECKOUT_WORKTREE_ONLY_LOSS'
+        } else {
+            # Final checkout did not reach master cleanly; cannot attribute to it.
+            Emit-StopMarkers -FirstNonClean 'D' -Interval 'FINAL_CHECKOUT_TARGET_NOT_REACHED' -LocalizedFinal 'NO' -Interference 'YES' -Classification 'BUILD_FINAL_CHECKOUT_NON_CLEAN_TARGET_UNREACHED'
+        }
         Write-Output "GIT_PROBE_F1_SHAPE_BUILD_FINAL_WORKTREE_INTERFERENCE=YES"
+        $ErrorActionPreference = $prevEAP
+        return
     }
+
+    # CASE 5: all A/B/C/D CLEAN -> the build did not reproduce the loss in this run.
+    Write-Output "NATIVE_RERUN_NOT_REPRODUCED_IN_ONE_RUN=YES"
+    Write-Output "GIT_PROBE_F1_SHAPE_BUILD_ALL_CHECKPOINTS_CLEAN=YES"
 
     $ErrorActionPreference = $prevEAP
 } finally {
