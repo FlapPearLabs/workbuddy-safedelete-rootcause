@@ -37,13 +37,14 @@ observed native runs.**
 - **Node.js + npm** on PATH (Bug A fixture install: `npm install` / `npm ci`).
 - **Network access to the npm registry** — Bug A Phase 1/2 fetches
   `parse5@8.0.1` + `entities@8.0.0` from the registry.
-- **A normal WorkBuddy installation** (any version; 5.3.11/5.3.13 observed) —
-  required for the SHIM phases of Bug A and for the Bug B native flow.
-  `bin/repro-all.ps1` auto-discovers the install; pass `-WorkbuddyInstall`
-  if it is not found.
+- **A normal WorkBuddy installation.** WorkBuddy 5.3.11 and 5.3.13 were
+  observed/tested during this investigation; behavior on other versions
+  may differ. Required for the SHIM phases of Bug A and for the Bug B
+  native flow. `bin/repro-all.ps1` auto-discovers the install; pass
+  `-WorkbuddyInstall` if it is not found.
 - **Real WorkBuddy-native context** is required for the Bug B native run —
-  the kernel sandbox is only active for processes spawned inside a WorkBuddy
-  tool-call. See `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`.
+  Bug B native reproduction requires the WorkBuddy-native execution context
+  observed in the R1/R2 runs. See `report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md`.
 - **Clone to a NON-TEMP, writable path.** The shim deliberately skips
   operations on `os.tmpdir()` paths (`genie-safe-delete.cjs`
   `shouldUseNativeDelete`), so cloning to `%TEMP%` will not reproduce the
