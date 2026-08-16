@@ -1,8 +1,8 @@
 # prepare-tsbx-lab-rule.ps1
 #
 # Phase 2A of the WorkBuddy-native experiment: PREPARE the narrow lab rule
-# in the live tsbx_rules.json so the kernel filter can pick it up on the
-# next WorkBuddy startup.
+# in the live tsbx_rules.json so the WorkBuddy sandbox runtime can pick it
+# up on the next WorkBuddy startup.
 #
 # Hard rules (per the final release-gate spec):
 #   - read original bytes; backup outside the WorkBuddy install dir

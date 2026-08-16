@@ -32,17 +32,18 @@ disposable lab that later WorkBuddy-native runs built upon.
   `BUG-REPORT-TENCENT.md`, `NATURAL-INCIDENT-F1.md`, `NEXT-WORKBUDDY-GIT-EXPERIMENT.md`,
   `environment-summary.txt`, `tsbx_rules.original.json`, `results-*.txt`.
 
-> **What Mavis could NOT do:** reproduce Bug B. The kernel filter (`tsbx.dll`) is only loaded
-> into processes spawned by `sandbox-cli.exe` inside a real WorkBuddy session. From a Mavis
-> shell, `git.exe` is not a WorkBuddy child, so Bug B was left at
-> `HIGH_CONFIDENCE_INFERENCE`. That gap was closed by the WorkBuddy-native phase.
+> **What Mavis could NOT do:** reproduce Bug B. The full WorkBuddy-native
+> execution chain (including any kernel-sandbox attachment) is only present
+> for processes spawned inside a real WorkBuddy tool-call session; a Mavis
+> shell is not such a chain, so Bug B was left at `HIGH_CONFIDENCE_INFERENCE`.
+> That gap was closed by the WorkBuddy-native phase.
 
 ---
 
 ## WORKBUDDY-NATIVE CONTRIBUTIONS
 
 The native phase (2026-08-14 → 2026-08-15) ran the probes **inside the real WorkBuddy
-sandbox execution chain**, where the kernel filter is active.
+sandbox execution chain** (same native context as the R1/R2 runs).
 
 - **Real native sandbox execution** — `assert-native-workbuddy-context.ps1` proving ancestry
   to `sandbox-cli.exe` (R1) / `WorkBuddy.exe` with session id (R2).

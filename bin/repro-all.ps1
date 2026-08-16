@@ -6,9 +6,11 @@
 #   4. Git probe A/B with master != feature delta and per-step integrity check
 #
 # The WorkBuddy-NATIVE sandbox phase (Mode C) is NOT executed by this script.
-# Mavis Code is not a WorkBuddy child process; the tsbx kernel filter cannot
-# be loaded into our git.exe. Native execution is the responsibility of the
-# WorkBuddy session; see report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md.
+# This process is not spawned through the WorkBuddy-native execution chain of
+# a real tool-call session; the full native sandbox context (incl. any kernel
+# sandbox attachment) is not present here. Native execution is the
+# responsibility of the WorkBuddy session; see
+# report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md.
 #
 # Usage:
 #   .\repro-all.ps1                          # auto-detect WorkBuddy install
@@ -25,21 +27,22 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '_lib.ps1')
 
 $repoRoot = Resolve-RepoRoot
+# Default OutputDir is unique (timestamp + GUID) so a fresh run never
+# collides with a previous run's output.
 if (-not $OutputDir) {
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $OutputDir = Join-Path $repoRoot ("work\repro-run-" + $stamp)
+    $guid8 = [guid]::NewGuid().ToString('N').Substring(0, 8)
+    $OutputDir = Join-Path $repoRoot ("work\repro-run-" + $stamp + "-" + $guid8)
 }
 # Always convert to absolute path so that downstream Push-Location calls in
 # child scripts don't pollute the relative resolution of $results / $OutputDir.
 $OutputDir = [System.IO.Path]::GetFullPath($OutputDir)
-# The caller-supplied/default OutputDir is explicitly created by this script,
-# so register it as an owned root for the scoped cleanup helper.
-$script:ReproOwnedRoots = @($OutputDir)
-function Remove-Owned {
-    param([string]$Path)
-    Remove-OwnedProbePath -Path $Path -OwnedRoots $script:ReproOwnedRoots
+# SAFETY CONTRACT: never delete an existing caller-supplied OutputDir. If the
+# selected OutputDir already exists (from a prior run or a user-chosen path),
+# refuse to start rather than recursively deleting it.
+if (Test-Path $OutputDir) {
+    throw "repro-all: OutputDir already exists; refusing to delete existing output. Use a fresh unique -OutputDir. Path: $OutputDir"
 }
-if (Test-Path $OutputDir) { Remove-Owned $OutputDir }
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 
 $results = Join-Path $OutputDir 'results.txt'
@@ -104,7 +107,7 @@ foreach ($d in @($nodeDeleteSmall, $nodeDeleteLarge, $gitProbeNormal, $gitProbeS
     }
 }
 $npmNodeModules = Join-Path $npmProbe 'node_modules'
-if (Test-Path $npmNodeModules) { Remove-Owned $npmNodeModules }
+if (Test-Path $npmNodeModules) { Remove-OwnedProbePath $npmNodeModules }
 # NOTE: npm-probe/_manifest_phase1.txt and _manifest_phase2.txt are
 # overwritten by bin/repro-npm-ci.ps1 on every run (Set-Content), so no
 # cleanup is needed here; they are owned files of the npm-probe fixture.
@@ -146,7 +149,6 @@ if ($wbShimAvailable) {
     $shimState = Join-Path $OutputDir 'shim-state-node'
     New-Item -ItemType Directory -Force -Path $shimState | Out-Null
     New-Item -ItemType Directory -Force -Path (Split-Path $shimReport) | Out-Null
-    if (Test-Path $shimReport) { Remove-Owned $shimReport }
     Set-WorkbuddyShimEnv -WbPath $WorkbuddyInstall -StateDir $shimState -ReportPath $shimReport
     & node (Join-Path $PSScriptRoot 'repro-node-delete.mjs') shim small $nodeDeleteSmall 2>&1 | ForEach-Object { Log "PHASE1C $_" }
     if (Test-Path $shimReport) { Get-Content $shimReport | ForEach-Object { Log "PHASE1C_SHIM_REPORT $_" } }
@@ -158,7 +160,6 @@ if ($wbShimAvailable) {
     $shimState2 = Join-Path $OutputDir 'shim-state-node-large'
     New-Item -ItemType Directory -Force -Path $shimState2 | Out-Null
     New-Item -ItemType Directory -Force -Path (Split-Path $shimReport2) | Out-Null
-    if (Test-Path $shimReport2) { Remove-Owned $shimReport2 }
     Set-WorkbuddyShimEnv -WbPath $WorkbuddyInstall -StateDir $shimState2 -ReportPath $shimReport2
     & node (Join-Path $PSScriptRoot 'repro-node-delete.mjs') shim large $nodeDeleteLarge 2>&1 | ForEach-Object { Log "PHASE1D $_" }
     if (Test-Path $shimReport2) { Get-Content $shimReport2 | ForEach-Object { Log "PHASE1D_SHIM_REPORT $_" } }
@@ -183,7 +184,7 @@ if ($wbShimAvailable) {
     $env:NODE_OPTIONS = ''
     Push-Location $npmProbe
     try {
-        if (Test-Path (Join-Path $npmProbe 'node_modules')) { Remove-Owned (Join-Path $npmProbe 'node_modules') }
+        if (Test-Path (Join-Path $npmProbe 'node_modules')) { Remove-OwnedProbePath (Join-Path $npmProbe 'node_modules') }
         $prevEAP = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
         & npm.cmd install --no-audit --no-fund 2>&1 | Out-Null
@@ -200,7 +201,7 @@ if ($wbShimAvailable) {
 # ============================================================================
 Log ""
 Log "==== PHASE 3: GIT PROBE A/B (NORMAL vs SHIM-ONLY) ===="
-Log "PHASE3_NOTE=SHIM-ONLY here means env+NODE_OPTIONS only; the WorkBuddy tsbx kernel filter is NOT loaded. This proves the Node shim alone does not affect git.exe."
+Log "PHASE3_NOTE=SHIM-ONLY reproduces the Node shim environment (env+NODE_OPTIONS) without the full WorkBuddy-native execution chain; the Node shim alone did not reproduce Bug B."
 
 $gitOutNormal = Join-Path $OutputDir 'git-cycles-normal.txt'
 $gitOutShim = Join-Path $OutputDir 'git-cycles-shim.txt'
@@ -213,12 +214,11 @@ $env:NODE_OPTIONS = ''
 Get-Content $gitOutNormal | ForEach-Object { Log "PHASE3A_DETAIL $_" }
 
 if ($wbShimAvailable) {
-    Log "--- PHASE 3B: SHIM-ONLY (env+NODE_OPTIONS, no kernel filter) ---"
+    Log "--- PHASE 3B: SHIM-ONLY (env+NODE_OPTIONS, non-native execution chain) ---"
     $shimReport3 = Join-Path $OutputDir 'shim-report-git.jsonl'
     $shimState3 = Join-Path $OutputDir 'shim-state-git'
     New-Item -ItemType Directory -Force -Path $shimState3 | Out-Null
     New-Item -ItemType Directory -Force -Path (Split-Path $shimReport3) | Out-Null
-    if (Test-Path $shimReport3) { Remove-Owned $shimReport3 }
     Set-WorkbuddyShimEnv -WbPath $WorkbuddyInstall -StateDir $shimState3 -ReportPath $shimReport3
     & (Join-Path $PSScriptRoot 'build-git-probe.ps1') -Repo $gitProbeShim 2>&1 | ForEach-Object { Log "PHASE3B_BUILD $_" }
     & (Join-Path $PSScriptRoot 'run-git-cycles.ps1') -Repo $gitProbeShim -Cycles $Cycles -OutputFile $gitOutShim -Merge $true 2>&1 | ForEach-Object { Log "PHASE3B_CYCLES $_" }
@@ -234,7 +234,7 @@ if ($wbShimAvailable) {
 Log ""
 Log "==== PHASE 4: WORKBUDDY NATIVE SANDBOX (Mode C) ===="
 Log "PHASE4_RESULT=NOT_EXECUTED_REQUIRES_WORKBUDDY_PARENT"
-Log "PHASE4_REASON=MiniMax Code is not a WorkBuddy child process; the tsbx kernel filter cannot be loaded into our git.exe. This phase must be run by the user's WorkBuddy tool-call execution. See report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md."
+Log "PHASE4_REASON=This phase requires the WorkBuddy-native execution chain (a real WorkBuddy tool-call session); this process does not run inside that chain. See report/NEXT-WORKBUDDY-GIT-EXPERIMENT.md."
 
 Log ""
 Log "REPRO_ALL_DONE timestamp=$(Get-Date -Format 'o')"

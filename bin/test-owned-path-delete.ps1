@@ -5,6 +5,12 @@
 # PASS cases (deletion must succeed):
 #   * owned GUID fixture under <repoRoot>\fixtures\
 #   * owned GUID control dir under $env:TEMP\workbuddy-rootcause-control\
+#   * NPM_NODE_MODULES_EXACT_DELETE_TEST: the exact
+#     <repoRoot>\npm-probe\node_modules path (and its children) must be
+#     deletable WITHOUT registration (real repro-all / repro-npm-ci call
+#     pattern). Tested in isolation via -RepoRootOverride, plus on the real
+#     path only when it does not already exist (never destroys existing
+#     runtime state).
 #
 # REFUSE cases (deletion must throw AND must NOT delete anything):
 #   * the repository root itself
@@ -14,10 +20,16 @@
 #   * an empty string
 #   * a filesystem root
 #
+# OUTPUTDIR_EXISTING_REFUSAL_TEST: repro-all.ps1 must REFUSE an existing
+# caller-supplied OutputDir (never recursively delete it); a sentinel file
+# must remain intact.
+#
 # Run:
 #   .\test-owned-path-delete.ps1
 # Output:
 #   OWNED_PATH_DELETE_TEST=PASS|FAIL
+#   NPM_NODE_MODULES_EXACT_DELETE_TEST=PASS|FAIL
+#   OUTPUTDIR_EXISTING_REFUSAL_TEST=PASS|FAIL
 #
 # No destructive broad delete: every target is a freshly created GUID-owned
 # fixture or a refusal case that must leave its target untouched.
@@ -104,6 +116,91 @@ Assert-Throws { Remove-OwnedProbePath -Path $script:ProductionRepoPath } 'produc
 Assert-Throws { Remove-OwnedProbePath -Path '' } 'empty string' ([ref]$fail)
 $driveRoot = [System.IO.Path]::GetPathRoot($env:SystemDrive)
 Assert-Throws { Remove-OwnedProbePath -Path $driveRoot } 'filesystem root' ([ref]$fail)
+
+# ---------------------------------------------------------------------------
+# NPM_NODE_MODULES_EXACT_DELETE_TEST — the exact
+# <repo>\npm-probe\node_modules path must be deletable WITHOUT registration
+# (the real repro-all.ps1 / repro-npm-ci.ps1 call pattern between the NORMAL
+# and SHIM npm-ci phases).
+# ---------------------------------------------------------------------------
+$npmExact = Join-Path $repoRoot 'npm-probe\node_modules'
+$npmExactOk = $true
+
+# 1) Isolated exact-root semantic test (always safe; never touches the real
+#    node_modules): a synthetic repo under the TEMP control dir.
+$fakeRoot = Join-Path $tmpControl ('exact-delete-fakerepo-' + [guid]::NewGuid().ToString('N').Substring(0,8))
+$fakeExact = Join-Path $fakeRoot 'npm-probe\node_modules'
+New-Item -ItemType Directory -Path $fakeExact -Force | Out-Null
+Set-Content -LiteralPath (Join-Path $fakeExact 'sentinel.txt') -Value 'x' -Encoding ASCII
+Remove-OwnedProbePath -Path $fakeExact -RepoRootOverride $fakeRoot
+if (Test-Path $fakeExact) {
+    Write-Output 'NPM_EXACT_CASE_FAILED=isolated fake node_modules still exists after delete'
+    $npmExactOk = $false
+} else {
+    Write-Output 'NPM_EXACT_CASE_OK=isolated exact node_modules deleted (no OwnedRoots)'
+}
+# Also prove children of the exact path are deletable.
+$fakeExact2 = Join-Path $fakeRoot 'npm-probe\node_modules'
+New-Item -ItemType Directory -Path $fakeExact2 -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $fakeExact2 'entities') -Force | Out-Null
+Set-Content -LiteralPath (Join-Path $fakeExact2 'entities\f.js') -Value 'x' -Encoding ASCII
+Remove-OwnedProbePath -Path (Join-Path $fakeExact2 'entities') -RepoRootOverride $fakeRoot
+if (Test-Path (Join-Path $fakeExact2 'entities')) {
+    Write-Output 'NPM_EXACT_CASE_FAILED=exact-path child not deleted'
+    $npmExactOk = $false
+} else {
+    Write-Output 'NPM_EXACT_CASE_OK=exact-path child deleted'
+}
+if (Test-Path $fakeExact2) { [System.IO.Directory]::Delete($fakeExact2, $true) }
+if (Test-Path $fakeRoot) { [System.IO.Directory]::Delete($fakeRoot, $true) }
+
+# 2) Real call pattern: only when the real npm-probe\node_modules does NOT
+#    exist (fresh-clone state). If it exists, do NOT destroy it — the
+#    isolated test above already proves the exact-root semantic.
+$realExactTouched = $false
+if (-not (Test-Path $npmExact)) {
+    New-Item -ItemType Directory -Path $npmExact -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $npmExact 'sentinel.txt') -Value 'x' -Encoding ASCII
+    Remove-OwnedProbePath -Path $npmExact
+    $realExactTouched = $true
+    if (Test-Path $npmExact) {
+        Write-Output 'NPM_EXACT_CASE_FAILED=real npm-probe\node_modules still exists after delete'
+        $npmExactOk = $false
+    } else {
+        Write-Output 'NPM_EXACT_CASE_OK=real call pattern deleted npm-probe\node_modules (no OwnedRoots)'
+    }
+} else {
+    Write-Output 'NPM_EXACT_CASE_SKIPPED=real npm-probe\node_modules already exists; left untouched (isolated test above proves semantics)'
+}
+
+if ($npmExactOk) { Write-Output 'NPM_NODE_MODULES_EXACT_DELETE_TEST=PASS' } else { Write-Output 'NPM_NODE_MODULES_EXACT_DELETE_TEST=FAIL'; $fail = $true }
+
+# ---------------------------------------------------------------------------
+# OUTPUTDIR_EXISTING_REFUSAL_TEST — repro-all.ps1 must REFUSE an existing
+# caller-supplied OutputDir (never delete it); the sentinel must survive.
+# ---------------------------------------------------------------------------
+$outDirExisting = Join-Path $env:TEMP ('outputdir-refusal-' + [guid]::NewGuid().ToString('N').Substring(0,8))
+New-Item -ItemType Directory -Path $outDirExisting -Force | Out-Null
+$sentinelFile = Join-Path $outDirExisting 'sentinel.txt'
+Set-Content -LiteralPath $sentinelFile -Value 'keep-me' -Encoding ASCII
+$refused = $false
+try {
+    & (Join-Path $PSScriptRoot 'repro-all.ps1') -OutputDir $outDirExisting 2>&1 | Out-Null
+} catch {
+    $refused = $true
+}
+$sentinelIntact = Test-Path -LiteralPath $sentinelFile
+if (-not $refused) {
+    Write-Output 'OUTPUTDIR_CASE_FAILED=repro-all did not refuse an existing OutputDir'
+    $fail = $true
+} elseif (-not $sentinelIntact) {
+    Write-Output 'OUTPUTDIR_CASE_FAILED=existing OutputDir was deleted (sentinel lost)'
+    $fail = $true
+} else {
+    Write-Output 'OUTPUTDIR_CASE_OK=repro-all refused existing OutputDir; sentinel intact'
+}
+if (Test-Path -LiteralPath $outDirExisting) { [System.IO.Directory]::Delete($outDirExisting, $true) }
+if ($refused -and $sentinelIntact) { Write-Output 'OUTPUTDIR_EXISTING_REFUSAL_TEST=PASS' } else { Write-Output 'OUTPUTDIR_EXISTING_REFUSAL_TEST=FAIL' }
 
 # ---------------------------------------------------------------------------
 # Cleanup the test's own fixtures only (use .NET primitives — PowerShell

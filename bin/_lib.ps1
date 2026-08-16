@@ -199,19 +199,23 @@ function Write-ManifestDiff {
 #      parent of it
 #   6. the user profile root and any parent of it
 #   7. any path outside the owned runtime areas (see below)
-# Owned runtime areas (deletion allowed only under these prefixes):
-#   * <repoRoot>\fixtures\            — runtime probe fixtures (gitignored)
-#   * <repoRoot>\npm-probe\node_modules
-#   * $env:TEMP\workbuddy-rootcause-control\
-#   * caller-registered -OwnedRoots   — explicitly-created dirs such as a
-#     caller-supplied -OutputDir or a per-run staging/backup dir. OwnedRoots
-#     entries are STILL subject to hard refuses 1-6.
-# Deleting an owned AREA ROOT itself (e.g. the whole fixtures\ dir, or the
-# whole workbuddy-rootcause-control\ dir) is refused unless that exact path
-# was explicitly registered via -OwnedRoots.
+# Owned runtime areas — two kinds:
+#   CONTAINER OWNED ROOTS (the root itself is NOT deletable by default;
+#     children are deletable):
+#     * <repoRoot>\fixtures\
+#     * $env:TEMP\workbuddy-rootcause-control\
+#   EXACT DELETABLE OWNED PATH (the exact path AND its children are
+#     deletable without registration):
+#     * <repoRoot>\npm-probe\node_modules
+#   caller-registered -OwnedRoots   — explicitly-created dirs such as a
+#     per-run staging/backup dir. An OwnedRoots entry allows deleting the
+#     exact path itself; entries are STILL subject to hard refuses 1-6.
 # Callers should prefer unique (GUID-suffixed) paths so cleanup is
 # unnecessary; this helper exists for the few deterministic resets that
 # remain (e.g. npm-probe\node_modules between A/B phases).
+# -RepoRootOverride is a TEST-ONLY seam: point the owned-area resolution at
+# a synthetic repo root so the exact-root semantics can be tested in
+# isolation without touching the real npm-probe\node_modules.
 # ============================================================================
 function Remove-OwnedProbePath {
     [CmdletBinding()]
@@ -219,7 +223,9 @@ function Remove-OwnedProbePath {
         [Parameter(Mandatory = $true)][string]$Path,
         # Extra roots this invocation explicitly created/owns. Still subject
         # to all hard refuses.
-        [string[]]$OwnedRoots = @()
+        [string[]]$OwnedRoots = @(),
+        # TEST-ONLY: synthetic repo root for isolated owned-area tests.
+        [string]$RepoRootOverride = ''
     )
     if ([string]::IsNullOrWhiteSpace($Path)) {
         throw 'Remove-OwnedProbePath: empty/null path refused'
@@ -234,7 +240,11 @@ function Remove-OwnedProbePath {
         throw 'Remove-OwnedProbePath: canonical path is empty'
     }
 
-    $repoRoot = (Resolve-RepoRoot).TrimEnd('\', '/')
+    if ($RepoRootOverride) {
+        $repoRoot = [System.IO.Path]::GetFullPath($RepoRootOverride).TrimEnd('\', '/')
+    } else {
+        $repoRoot = (Resolve-RepoRoot).TrimEnd('\', '/')
+    }
     $root = [System.IO.Path]::GetPathRoot($full)
     if ([string]::IsNullOrEmpty($root)) {
         throw "Remove-OwnedProbePath: no path root for '$full'"
@@ -267,12 +277,15 @@ function Remove-OwnedProbePath {
     }
 
     # 5) owned-area check
-    $owned = @(
+    $containerRoots = @(
         (Join-Path $repoRoot 'fixtures'),
+        (Join-Path $env:TEMP 'workbuddy-rootcause-control')
+    )
+    # The exact node_modules path itself is deletable (fresh-clone Bug A
+    # transitions between NORMAL and SHIM phases call this exact path).
+    $exactDeletable = @(
         (Join-Path $repoRoot 'npm-probe\node_modules')
     )
-    $tempOwned = Join-Path $env:TEMP 'workbuddy-rootcause-control'
-    if ($tempOwned) { $owned += $tempOwned }
 
     # Normalize OwnedRoots for exact-match comparison.
     $ownedRootsNorm = @()
@@ -282,21 +295,37 @@ function Remove-OwnedProbePath {
     }
 
     $isOwned = $false
-    foreach ($r in @($owned + $ownedRootsNorm)) {
+
+    # 5a) EXACT DELETABLE OWNED PATH — exact path and children are deletable
+    # without registration.
+    foreach ($r in $exactDeletable) {
         if ([string]::IsNullOrWhiteSpace($r)) { continue }
         $rNorm = ''
         try { $rNorm = [System.IO.Path]::GetFullPath($r).TrimEnd('\', '/') } catch { continue }
-        if ($full -ieq $rNorm) {
-            # Deleting the area root itself is only allowed when this exact
-            # path was explicitly registered by the caller.
-            if ($ownedRootsNorm -contains $rNorm) { $isOwned = $true; break }
-            continue
-        }
-        if ($full.StartsWith($rNorm + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+        if ($full -ieq $rNorm -or $full.StartsWith($rNorm + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
             $isOwned = $true
             break
         }
     }
+
+    # 5b) CONTAINER OWNED ROOTS — children are deletable; the exact root
+    # itself is refused unless registered via -OwnedRoots.
+    if (-not $isOwned) {
+        foreach ($r in @($containerRoots + $ownedRootsNorm)) {
+            if ([string]::IsNullOrWhiteSpace($r)) { continue }
+            $rNorm = ''
+            try { $rNorm = [System.IO.Path]::GetFullPath($r).TrimEnd('\', '/') } catch { continue }
+            if ($full -ieq $rNorm) {
+                if ($ownedRootsNorm -contains $rNorm) { $isOwned = $true; break }
+                continue
+            }
+            if ($full.StartsWith($rNorm + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+                $isOwned = $true
+                break
+            }
+        }
+    }
+
     if (-not $isOwned) {
         throw "Remove-OwnedProbePath: path is not an owned probe area; refusing: $full"
     }

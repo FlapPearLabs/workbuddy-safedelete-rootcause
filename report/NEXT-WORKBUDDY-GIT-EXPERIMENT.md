@@ -164,7 +164,14 @@ powershell -ExecutionPolicy Bypass -File .\bin\test-attribution-preop.ps1
 **Goal:** Determine whether the worktree file loss reproduces inside a
 real WorkBuddy tool-call session, with `tsbx_rules.json` unchanged.
 
-### 2.1 — Pre-flight
+### 2.1 — Pre-flight (native-context probe)
+
+> Do NOT use `bin/repro-all.ps1` as the native preflight: its
+> `REPRO_ALL_WORKBUDDY_SHIM_AVAILABLE=True` only proves the WorkBuddy
+> install's shim artifacts are *discoverable on disk* — it does NOT prove
+> the current process is inside the same WorkBuddy-native execution chain
+> as the R1/R2 runs. Use `bin/assert-native-workbuddy-context.ps1` instead,
+> and record its output BEFORE the F1-shape build.
 
 ```powershell
 # 1) Locate the lab repo (replace with the actual clone path).
@@ -174,15 +181,34 @@ real WorkBuddy tool-call session, with `tsbx_rules.json` unchanged.
 $labRoot = Join-Path $env:USERPROFILE 'workbuddy-safedelete-rootcause'   # <-- replace if needed
 Set-Location $labRoot
 
-# 2) Sanity check: WorkBuddy is present and the lab scripts can find it.
-& $labRoot\bin\repro-all.ps1 -OutputDir (Join-Path $labRoot 'work\repro-preflight') 2>&1 |
-    Select-String -Pattern 'REPRO_ALL_WORKBUDDY_SHIM_AVAILABLE'
-# Expected: REPRO_ALL_WORKBUDDY_SHIM_AVAILABLE=True
-# If False, abort: the kernel sandbox cannot be exercised without a real install.
+# 2) Native-context probe: is THIS process inside the WorkBuddy-native
+#    execution chain (same context as R1/R2)?
+$phase1Dir = Join-Path $labRoot 'work\repro-workbuddy-phase1'
+New-Item -ItemType Directory -Force -Path $phase1Dir | Out-Null
+$ctxOut = Join-Path $phase1Dir 'context-assert.txt'
+& "$labRoot\bin\assert-native-workbuddy-context.ps1" -OutputFile $ctxOut 2>&1 |
+    Tee-Object -FilePath (Join-Path $phase1Dir 'context-assert-console.txt')
+Get-Content $ctxOut
+# Expected: WORKBUDDY_NATIVE_ANCESTRY_CONFIRMED=YES (R2 observed YES with a
+# session id present; R1 observed UNKNOWN with ancestry reaching
+# sandbox-cli.exe). If it reports NO, STOP — the WorkBuddy-native execution
+# chain is not active for this shell, so this is not a valid Bug B native
+# run. Record the probe output as a Phase 1 deliverable.
+
+# 3) (optional) Verify the WorkBuddy install is discoverable by the lab
+#    scripts; this is separate from the context probe above.
+. (Join-Path $labRoot 'bin\_lib.ps1')
+$wbInstall = Resolve-WorkbuddyInstallPath
+if (-not $wbInstall) {
+    Write-Output 'PREFLIGHT_WORKBUDDY_INSTALL=NOT_FOUND'
+} else {
+    Write-Output "PREFLIGHT_WORKBUDDY_INSTALL=$wbInstall"
+}
 ```
 
-If preflight reports `SHIM_AVAILABLE=True`, proceed. Otherwise stop and
-report to the user.
+Proceed to the F1-shape build only when the context probe confirms the
+WorkBuddy-native execution chain. Do NOT run the Node/npm/Git A/B phases
+merely as a preflight.
 
 ### 2.2 — Run the F1-shape Git probe from inside a WorkBuddy tool-call
 
@@ -226,10 +252,19 @@ Get-Content (Join-Path $phase1Dir 'outcome.txt')
 #   WORKTREE_LOSS_REPRODUCED=NO
 #   GIT_CYCLES_EXPECTED_MUTATION_CHECK_COUNT=11
 #   GIT_CYCLES_ACTUAL_MUTATION_CHECK_COUNT=11
+#   -> interpretation label: NO_IN_11_STEPS
 # A physical loss run:
 #   RUN_CLASSIFICATION=WORKTREE_ONLY_LOSS
 #   WORKTREE_LOSS_REPRODUCED=YES
+#   -> interpretation label: REPRODUCED
 ```
+
+> **`NO_IN_11_STEPS` is an INTERPRETATION LABEL, not a value of
+> `WORKTREE_LOSS_REPRODUCED`.** The classifier always emits
+> `WORKTREE_LOSS_REPRODUCED=YES|NO|UNKNOWN`. The clean 11/11 outcome
+> (RUN_CLASSIFICATION=CLEAN, WORKTREE_LOSS_REPRODUCED=NO,
+> EXPECTED=11, ACTUAL=11) is labeled **NO_IN_11_STEPS** in the human
+> summary of this document only.
 
 **If `WORKTREE_LOSS_REPRODUCED: YES`:**
 
@@ -255,19 +290,20 @@ Get-Content (Join-Path $phase1Dir 'outcome.txt')
   the user's confirmation, because Phase 2A requires editing
   `tsbx_rules.json`.
 
-**If `WORKTREE_LOSS_REPRODUCED: NO_IN_11_STEPS`:**
+**If the outcome is CLEAN / NO (interpretation label `NO_IN_11_STEPS`):**
 (the outcome shows `RUN_CLASSIFICATION=CLEAN`, `WORKTREE_LOSS_REPRODUCED=NO`,
 `GIT_CYCLES_ACTUAL_MUTATION_CHECK_COUNT=11`)
 
-- Save the same outcome record as `NO_IN_11_STEPS`.
+- Record the outcome with the interpretation label `NO_IN_11_STEPS`.
 - **Do not loop indefinitely.** 5 cycles + 1 merge = 11 steps, 11
   `WORKTREE_CHECK_VERDICT` lines. The probe is a strong negative if
   all 11 are `CLEAN`.
-- **Stop and report to the user.** The kernel sandbox is either not
-  active for this `git.exe` invocation, or the worktree file loss
-  requires a different workload (more files, different file types, a
-  specific branch shape) than the F1-shape probe. The investigation
-  should be redirected.
+- **Stop and report to the user.** The anomaly did not reproduce in the
+  WorkBuddy-native F1-shape run; either the native context differs from
+  R1/R2 (e.g. the sandbox runtime was not attached to this invocation), or
+  the worktree file loss requires a different workload (more files,
+  different file types, a specific branch shape) than the F1-shape probe.
+  The investigation should be redirected.
 
 **If `RUN_CLASSIFICATION` is anything else** (`GIT_OPERATION_INTERFERENCE`,
 `PREEXISTING_NON_CLEAN`, `INSTRUMENTATION_ERROR`, `CHECKER_ERROR`):
@@ -436,9 +472,10 @@ $repo = Join-Path $labRoot ('fixtures\git-probe-f1shape-allowrule-' + (Get-Date 
     Out-Null
 ```
 
-Apply the same interpretation as Phase 1.2: outcome is
-`WORKTREE_LOSS_REPRODUCED: <YES | NO_IN_11_STEPS | UNKNOWN>` plus
-`RUN_CLASSIFICATION=...`.
+Apply the same interpretation as Phase 1.2: the classifier emits
+`RUN_CLASSIFICATION=` and `WORKTREE_LOSS_REPRODUCED=YES|NO|UNKNOWN`.
+A clean outcome is interpreted as **`NO_IN_11_STEPS`** (interpretation
+label — never a value of `WORKTREE_LOSS_REPRODUCED`).
 
 ### 4.3 — Phase 2B deliverables
 
@@ -510,11 +547,14 @@ file. Please:
 
 1. Attach the `outcome.txt` from Phase 1 and Phase 2B to the
    investigation.
-2. If Phase 1 = `WORKTREE_LOSS_REPRODUCED: YES` (with
-   `RUN_CLASSIFICATION=WORKTREE_ONLY_LOSS` or `WORKTREE_CONTENT_DIVERGENCE`)
-   and Phase 2B = `NO_IN_11_STEPS`:
+2. If Phase 1 interpretation = `REPRODUCED` (`WORKTREE_LOSS_REPRODUCED: YES`
+   with `RUN_CLASSIFICATION=WORKTREE_ONLY_LOSS` or
+   `WORKTREE_CONTENT_DIVERGENCE`) and Phase 2B interpretation =
+   `NO_IN_11_STEPS` (`WORKTREE_LOSS_REPRODUCED: NO`,
+   `RUN_CLASSIFICATION=CLEAN`):
    - `SANDBOX_POLICY_CAUSE_CONFIRMED`.
-3. If Phase 1 = `NO_IN_11_STEPS`:
+3. If Phase 1 interpretation = `NO_IN_11_STEPS`
+   (`WORKTREE_LOSS_REPRODUCED: NO`, `RUN_CLASSIFICATION=CLEAN`):
    - the investigation **stays at HIGH_CONFIDENCE_INFERENCE** for
      Issue B's component-level cause; the bug report's "Severity"
      and "Issue B" sections should remain downgraded accordingly.

@@ -116,7 +116,7 @@ user-side audit log independently confirms the same error class.
 
 | | NORMAL | WORKBUDDY SHIM-ONLY (env + `NODE_OPTIONS=--require=...`) | WORKBUDDY NATIVE (sandbox/filesystem layer) |
 |---|---|---|---|
-| Non-WorkBuddy shell probe | 11/11 `WORKTREE_CHECK_VERDICT=CLEAN` | 11/11 `WORKTREE_CHECK_VERDICT=CLEAN` | n/a (filter not active) |
+| Non-WorkBuddy shell probe | 11/11 `WORKTREE_CHECK_VERDICT=CLEAN` | 11/11 `WORKTREE_CHECK_VERDICT=CLEAN` | n/a (full native execution chain not present) |
 | Native WorkBuddy R1 | — | — | **REPRODUCED** (59-file worktree-only loss) |
 | Native WorkBuddy R2 (controlled) | — | — | **CLEAN** at all 4 checkpoints (loss not reproduced this run) |
 | User-side observation | never observed | never observed | 5+ events in audit log |
@@ -207,10 +207,10 @@ bulk-guard threshold that governs Issue A does **not** apply to Issue B.
 
 | Probe | NORMAL | WORKBUDDY SHIM SIMULATION | WORKBUDDY NATIVE (sandbox/filesystem layer) |
 |---|---|---|---|
-| Node fs.rm small (5 files) | native delete, exit 0 | shim silently trashes, exit 0 | n/a (kernel filter not exercised in lab) |
+| Node fs.rm small (5 files) | native delete, exit 0 | shim silently trashes, exit 0 | n/a (native chain not exercised in lab) |
 | Node fs.rm large (40 files) | native delete, exit 0 | shim BLOCKS with `SAFE_DELETE_BULK_CONFIRM_REQUIRED`, exit 1 | n/a |
 | `npm ci` | exit 0, clean, REMOVED=0 | exit 1, `node_modules` half-deleted, shim report confirms `.package-lock.json` trashed before guard fires | n/a |
-| Git worktree cycles (5+1) — Mavis shell | TRACKED=60, PHYSICAL=60, MISSING=0, all 11 steps CLEAN | TRACKED=60, PHYSICAL=60, MISSING=0, all 11 steps CLEAN | n/a (filter not active) |
+| Git worktree cycles (5+1) — Mavis shell | TRACKED=60, PHYSICAL=60, MISSING=0, all 11 steps CLEAN | TRACKED=60, PHYSICAL=60, MISSING=0, all 11 steps CLEAN | n/a (full native execution chain not present) |
 | Git worktree — native R1 (F1-shape) | — | — | **REPRODUCED** 59-file `WORKTREE_ONLY_LOSS`, HEAD/index intact |
 | Git worktree — native R2 (4-checkpoint) | — | — | **CLEAN** at A/B/C/D, loss not reproduced this run |
 

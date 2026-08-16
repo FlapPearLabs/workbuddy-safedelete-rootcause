@@ -1,8 +1,10 @@
 # assert-native-workbuddy-context.ps1
 #
-# Asserts that the current PowerShell process is executing inside a
-# real WorkBuddy tool-call session (i.e. the kernel filter
-# tsbx.dll IS loaded into git.exe when git is spawned from here).
+# Asserts that the current PowerShell process is executing inside the
+# same WorkBuddy-native execution chain as the R1/R2 native runs (i.e. a
+# process spawned under a real WorkBuddy tool-call session). This does NOT
+# directly observe kernel-filter attachment state; it records process
+# ancestry and session-id presence as evidence of the execution context.
 #
 # This is NOT the same as `REPRO_ALL_WORKBUDDY_SHIM_AVAILABLE=True`,
 # which only proves the WorkBuddy install + Node shim is on disk.

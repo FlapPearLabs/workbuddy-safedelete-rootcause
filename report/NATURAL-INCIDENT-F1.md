@@ -239,11 +239,13 @@ cookies).** Only the safe, abstracted facts are recorded.
   - The OS recycle bin was used as the redirect target.
   - A specific kernel `IRP_MJ_SET_INFORMATION` was denied or
     redirected by a minifilter.
-- Whether the kernel filter is even active for the user's
-  `git.exe` invocation at all. The kernel filter is loaded into
-  processes spawned by `sandbox-cli.exe`; the user's audit log
-  shows WorkBuddy tool-call execution, but the exact ancestry
-  for the merge invocation was not captured in this round.
+- Whether the kernel-sandbox layer was even active for the user's
+  `git.exe` invocation at all. The full WorkBuddy-native execution chain
+  (including any kernel-sandbox attachment) is understood to be present for
+  processes spawned inside a real WorkBuddy tool-call session; the user's
+  audit log shows WorkBuddy tool-call execution, but the exact ancestry
+  for the merge invocation was not captured in this round, and no direct
+  filter attachment state was observed.
 - The exact reload mechanism of `tsbx_rules.json` (hot-reload vs.
   per-invocation vs. process startup). This is independent of the
   F1 incident and is documented elsewhere.

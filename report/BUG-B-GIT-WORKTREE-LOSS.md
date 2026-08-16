@@ -86,9 +86,10 @@ From a non-WorkBuddy shell: 11/11 `WORKTREE_CHECK_VERDICT=CLEAN` (5 switch cycle
 merge). No loss. → NEGATIVE CONTROL.
 
 ## SHIM-ONLY CONTROL
-Env + `NODE_OPTIONS=--require=genie-safe-delete.cjs` (Node shim active, **no** kernel filter):
-11/11 `WORKTREE_CHECK_VERDICT=CLEAN`. → NEGATIVE CONTROL; **Node shim alone does NOT cause
-Bug B** (FALSIFIED).
+Env + `NODE_OPTIONS=--require=genie-safe-delete.cjs` (Node shim environment
+reproduced **without** the full WorkBuddy-native execution chain):
+11/11 `WORKTREE_CHECK_VERDICT=CLEAN`. → NEGATIVE CONTROL; **the Node shim
+alone did NOT reproduce Bug B** (shim-cause falsified).
 
 ## SIGNATURE (every observed case)
 ```

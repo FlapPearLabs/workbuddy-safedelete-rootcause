@@ -347,9 +347,9 @@ Concretely, for every step:
 - `MODIFIED_COUNT=0` after a clean switch
 - After the merge: `TRACKED=71` (master + feature additions), `PHYSICAL=71`, all intact
 
-**Critical negative finding:** the simulated WorkBuddy env (env vars + `NODE_OPTIONS=--require=genie-safe-delete.cjs`) does **not** reproduce the worktree file loss. The Node shim is a per-Node-process patch and does not touch `git.exe`. The kernel filter (`tsbx.dll`) is the layer that intercepts `git.exe`'s file operations at the IRP level, and it is only loaded when `git.exe` is spawned as a child of `sandbox-cli.exe` inside a real WorkBuddy session.
+**Critical negative finding:** the simulated WorkBuddy env (env vars + `NODE_OPTIONS=--require=genie-safe-delete.cjs`) reproduces the Node shim environment **without** the full WorkBuddy-native execution chain, and does **not** reproduce the worktree file loss. The Node shim is a per-Node-process patch and does not touch `git.exe`. The kernel-sandbox layer (`tsbx.dll`) is the leading candidate mechanism (HIGH_CONFIDENCE_HYPOTHESIS); its exact attachment/interception behavior was not directly traced in this round. This negative result bounds the Node-shim layer only — it does not assert a definitive filter attachment state for any process.
 
-**This is the key reason the Issue B experiment must be executed inside a real WorkBuddy tool-call, not in the lab.** The lab probe conclusively proves that the Node shim layer is not responsible for the git worktree anomaly. The kernel-filter layer is the leading candidate mechanism (HIGH_CONFIDENCE_HYPOTHESIS) consistent with the observed user-side pattern (5+ events in the audit log).
+**This is the key reason the Issue B experiment must be executed inside a real WorkBuddy tool-call, not in the lab.** The lab SHIM-ONLY control did not reproduce the anomaly with the Node shim alone (shim-cause falsified). The kernel-sandbox layer is the leading candidate mechanism (HIGH_CONFIDENCE_HYPOTHESIS) consistent with the observed user-side pattern (5+ events in the audit log).
 
 ---
 

@@ -10,7 +10,8 @@
 #       Phase 2A = prepare (atomic edit + byte-exact backup of tsbx_rules.json)
 #       Phase 2B = after user-controlled WorkBuddy restart, run the same Git probe
 #       Phase 2C = always restore the original bytes + second user-controlled restart
-#   - Phase 3: Optional ETW / ProcMon capture of the kernel-filter denials
+#   - Phase 3: Optional ETW / ProcMon capture of relevant filesystem operations
+#     and sandbox / filter activity (a denial is possible but not presupposed)
 #
 # The full procedure includes:
 #   * Sanity checks (WorkBuddy install present, shim available)
@@ -46,16 +47,20 @@
 #
 # Expected outcomes:
 #   Phase 1 (no rule change, 11 per-step checks: 5+1+5):
-#     WORKTREE_LOSS_REPRODUCED: <YES | NO_IN_11_STEPS>
+#     RUN_CLASSIFICATION=CLEAN | WORKTREE_ONLY_LOSS | WORKTREE_CONTENT_DIVERGENCE | ...
+#     WORKTREE_LOSS_REPRODUCED: YES | NO | UNKNOWN
+#     (clean 11/11 outcome -> interpretation label NO_IN_11_STEPS; the label
+#      is NOT a value of WORKTREE_LOSS_REPRODUCED — see
+#      NEXT-WORKBUDDY-GIT-EXPERIMENT.md)
 #   Phase 2B (with inherit_user rule covering only the lab root, 11 per-step checks):
-#     WORKTREE_LOSS_REPRODUCED: <YES | NO_IN_11_STEPS>
+#     same outcome tokens; clean outcome interpreted as NO_IN_11_STEPS
 #
-#   If Phase 1 = YES and Phase 2B = NO:
+#   If Phase 1 interpretation = REPRODUCED (YES) and Phase 2B = NO_IN_11_STEPS:
 #     SANDBOX_POLICY_CAUSE_CONFIRMED
-#   If Phase 3 (ETW/ProcMon) also captures the kernel-filter denials:
+#   If Phase 3 (ETW/ProcMon) also captures sandbox-runtime denials:
 #     COMPONENT_LEVEL_CAUSE_CONFIRMED
 #
-#   If Phase 1 = NO_IN_11_STEPS:
+#   If Phase 1 interpretation = NO_IN_11_STEPS (CLEAN / NO):
 #     The investigation stays at HIGH_CONFIDENCE_INFERENCE for Issue B's
 #     component-level cause, and the bug report's "Severity" and "Issue B"
 #     sections should be downgraded accordingly.
