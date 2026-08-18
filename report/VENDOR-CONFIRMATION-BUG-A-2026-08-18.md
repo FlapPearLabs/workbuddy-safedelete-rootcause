@@ -26,6 +26,21 @@ The engineer later confirmed that the author may publicly quote the conclusions 
 
 This is a vendor confirmation of the technical finding. It is **not** an endorsement by Tencent of this repository or its author.
 
+## Public screenshot evidence
+
+A sanitized composite screenshot of the support conversation is published in GitHub Issue #1. It preserves three points while removing ticket/account/contact identifiers and private support metadata:
+
+1. Tencent WorkBuddy engineering confirmed that the reported issue is real and that the root cause is in WorkBuddy's sandbox-injected `safe-delete` component.
+2. The production client logs independently corroborated package-manager failures caused by `SAFE_DELETE_BULK_CONFIRM_REQUIRED`.
+3. The support engineer explicitly permitted the author to publicly quote the conclusions of the log analysis.
+
+- Issue: https://github.com/FlapPearLabs/workbuddy-safedelete-rootcause/issues/1
+- Permanent screenshot comment: https://github.com/FlapPearLabs/workbuddy-safedelete-rootcause/issues/1#issuecomment-5328612341
+- Stable GitHub attachment: https://github.com/user-attachments/assets/84670e34-57f2-428d-8c79-18cb5c41038f
+- Sanitized composite SHA256: `37e2d9c76d3d1549a59811b08047f730674785cc7228f31cfdf208e2234c059d`
+
+The original uncropped support conversation remains private. The published image is a sanitized derivative, not the raw ticket record.
+
 ## What Tencent verified from the submitted logs
 
 ### 1. safe-delete injection exists in production WorkBuddy sessions
